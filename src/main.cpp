@@ -9,13 +9,21 @@ std::ostream& operator<<(std::ostream& ost, FT_Vector vec)
     return ost << "FT_Vector{" << vec.x << ", " << vec.y << "}";
 }
 
+template <U8 BitPos>
+U32 bit(U8 val)
+{
+    return (val>>BitPos)&1;
+}
+
 std::string decodeTag(U8 tag)
 {
     std::stringstream ss;
     ss << "Tag{";
-    ss << "OnCurve: " << int(tag&1);
-    if (tag&1) ss << ", ThirdOrder: " << int((tag>>1)&1);
-    if ((tag>>2)&1) ss << ", DropOutMode: " << int(tag>>5);
+    ss << "OnCurve: " << bit<0>(tag);
+    if (!bit<0>(tag))
+    {
+        ss << " [" << (bit<1>(tag) ? "Third" : "Second") << " order]";
+    }
     ss << "}";
     return ss.str();
 }
@@ -38,10 +46,8 @@ void dumpInfo(FT_Outline outline)
         }
         p = outline.contours[i]+1;
     }
-    for (short i = 0; i < outline.n_points; ++i)
-    {
-    }
 }
+
 
 int main()
 {
@@ -56,7 +62,11 @@ int main()
                              &face));
 
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 32));
-    auto idx = FT_Get_Char_Index(face, 'A');
+    // For complicated glyph, use U+2593.
+    // Slightly simpler: U+E5.
+    // Even simpler: 'A'.
+    // Simplest: 'H'.
+    auto idx = FT_Get_Char_Index(face, 'H');
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_DEFAULT));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
