@@ -1,19 +1,16 @@
 #include "image.hpp"
 #include "freetype.hpp"
+#include "common.hpp"
 
 #include <iostream>
 #include <sstream>
+#include <vector>
 
 std::ostream& operator<<(std::ostream& ost, FT_Vector vec)
 {
     return ost << "FT_Vector{" << vec.x << ", " << vec.y << "}";
 }
 
-template <U8 BitPos>
-U32 bit(U8 val)
-{
-    return (val>>BitPos)&1;
-}
 
 std::string decodeTag(U8 tag)
 {

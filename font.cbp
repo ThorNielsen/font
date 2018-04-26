@@ -64,11 +64,15 @@
 		<Linker>
 			<Add library="freetype" />
 		</Linker>
+		<Unit filename="src/common.hpp" />
 		<Unit filename="src/freetype.hpp" />
+		<Unit filename="src/glyph.cpp" />
+		<Unit filename="src/glyph.hpp" />
 		<Unit filename="src/image.cpp" />
 		<Unit filename="src/image.hpp" />
 		<Unit filename="src/main.cpp" />
 		<Unit filename="src/types.hpp" />
+		<Unit filename="src/vector2.hpp" />
 		<Extensions>
 			<envvars />
 			<code_completion />
