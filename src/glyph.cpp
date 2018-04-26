@@ -50,13 +50,36 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-bool intersects(Ray r, LineSegment l)
+int intersectionCount(Ray r, LineSegment l)
 {
     auto invDet = l.dir.x * r.dir.y - l.dir.y * r.dir.x;
     if (!invDet) // Degenerate case (parallel)
     {
-        // Parallel lines.
-        return false;
+        auto ad = l.pos - r.pos;
+        if (ad.x * r.dir.y == ad.y * r.dir.x) // Same line
+        {
+            auto adrd = dot(ad, r.dir);
+            auto adldrd = adrd + dot(l.dir, r.dir);
+            if (dot(r.dir, l.dir) >= 0) // Same direction
+            {
+                int ret = 0;
+                if (adrd > 0) ++ret;
+                if (adldrd > 0) ++ret;
+                std::cout << ret;
+                return ret;
+            }
+            else // Opposite direction
+            {
+                int ret = 0;
+                if (adrd <= 0) ++ret;
+                if (adldrd <= 0) ++ret;
+                std::cout << 8-ret;
+                return ret;
+            }
+        }
+        // Parallel but non-intersecting.
+        std::cout << 'a';
+        return 0;
     }
     imat2 m( r.dir.y, -r.dir.x,
             -l.dir.y,  l.dir.x);
@@ -73,27 +96,32 @@ bool intersects(Ray r, LineSegment l)
     if (coeffs.y < 0)
     {
         // Line is behind ray.
-        return false;
+        std::cout << 'b';
+        return 0;
     }
     if (coeffs.x < 0)
     {
         // Ray is below line segment.
-        return false;
+        std::cout << 'c';
+        return 0;
     }
     if (invDet < coeffs.x)
     {
         // Ray is above line segment.
-        return false;
+        std::cout << 'd';
+        return 0;
     }
-    return true;
+    // Ray intersects line segment non-degenerately.
+    std::cout << 'e';
+    return 1;
 }
 
 // Currently only handles line segments.
-bool Glyph::isInside(ivec2 pos) const
+bool Glyph::isInside(ivec2 pos, ivec2 dir) const
 {
     size_t intersectCount = 0;
     Ray testRay;
-    testRay.dir = {1, 1};
+    testRay.dir = dir; //{1, 0};
     testRay.pos = pos;
     size_t contourBegin = 0;
     for (size_t i = 0; i < contours(); ++i)
@@ -105,7 +133,7 @@ bool Glyph::isInside(ivec2 pos) const
         for (size_t j = contourBegin; j < contourEnd(i); ++j)
         {
             cLine.dir = position(j) - cLine.pos;
-            intersectCount += intersects(testRay, cLine);
+            intersectCount += intersectionCount(testRay, cLine);
 
             cLine.pos = position(j);
         }

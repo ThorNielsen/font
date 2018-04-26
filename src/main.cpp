@@ -48,7 +48,15 @@ int main()
 
     Glyph glyph(slot->outline);
     glyph.dumpInfo();
-    std::cout << glyph.isInside({193, 1}) << std::endl;
+    /*std::cout << glyph.isInside({192, 0}, {1, 0}) << std::endl;
+    std::cout << glyph.isInside({192, 0}, {-1, 0}) << std::endl;
+    std::cout << glyph.isInside({192, 0}, {0, 1}) << std::endl;
+    std::cout << glyph.isInside({192, 0}, {0, -1}) << std::endl;
+    std::cout << std::endl;
+    std::cout << glyph.isInside({192, 0}, {1, 1}) << std::endl;
+    std::cout << glyph.isInside({192, 0}, {1, -1}) << std::endl;
+    std::cout << glyph.isInside({192, 0}, {-1, 1}) << std::endl;*/
+    std::cout << glyph.isInside({192, 0}, {-1, -1}) << std::endl;
 
     checkFTError(FT_Done_FreeType(ftLib));
 }

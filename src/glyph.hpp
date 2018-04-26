@@ -13,7 +13,7 @@ public:
 
     void dumpInfo() const;
 
-    bool isInside(ivec2 pos) const;
+    bool isInside(ivec2 pos, ivec2 dir) const;
 
     size_t contours() const { return m_contourEnd.size(); }
     size_t positions() const { return m_position.size(); }
