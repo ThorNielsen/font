@@ -1,6 +1,48 @@
 #include "image.hpp"
 #include "freetype.hpp"
 
+#include <iostream>
+#include <sstream>
+
+std::ostream& operator<<(std::ostream& ost, FT_Vector vec)
+{
+    return ost << "FT_Vector{" << vec.x << ", " << vec.y << "}";
+}
+
+std::string decodeTag(U8 tag)
+{
+    std::stringstream ss;
+    ss << "Tag{";
+    ss << "OnCurve: " << int(tag&1);
+    if (tag&1) ss << ", ThirdOrder: " << int((tag>>1)&1);
+    if ((tag>>2)&1) ss << ", DropOutMode: " << int(tag>>5);
+    ss << "}";
+    return ss.str();
+}
+
+void dumpInfo(FT_Outline outline)
+{
+    std::cout << "=== Glyph data === \n";
+    std::cout << "Contour count: " << outline.n_contours << "\n";
+    std::cout << "Point count: " << outline.n_points << "\n";
+    short p = 0;
+    for (short i = 0; i < outline.n_contours; ++i)
+    {
+        std::cout << "Contour #" << i << ":\n";
+        for (short j = p; j <= outline.contours[i]; ++j)
+        {
+            std::cout << "Point[" << j << "]: "
+                      << outline.points[j] << " "
+                      << decodeTag(outline.tags[j])
+                      << "\n";
+        }
+        p = outline.contours[i]+1;
+    }
+    for (short i = 0; i < outline.n_points; ++i)
+    {
+    }
+}
+
 int main()
 {
     FT_Library ftLib;
@@ -35,6 +77,8 @@ int main()
         }
     }
     writeImage(img);
+
+    dumpInfo(slot->outline);
 
     checkFTError(FT_Done_FreeType(ftLib));
 }
