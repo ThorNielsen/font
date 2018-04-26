@@ -4,7 +4,7 @@
 #include <iostream>
 
 Glyph::Glyph(FT_Outline outline)
-    : m_contourEnds(outline.n_contours),
+    : m_contourEnd(outline.n_contours),
       m_position(outline.n_points),
       m_isControlPoint(outline.n_points),
       m_isThirdOrder(outline.n_points)
@@ -18,6 +18,32 @@ Glyph::Glyph(FT_Outline outline)
     }
     for (short i = 0; i < outline.n_contours; ++i)
     {
-        m_contourEnds[i] = outline.contours[i]+1;
+        m_contourEnd[i] = outline.contours[i]+1;
     }
+}
+
+void Glyph::dumpInfo() const
+{
+    std::cout << "=== Glyph outline ===\n";
+    std::cout << "Contour count: " << m_contourEnd.size() << "\n";
+    std::cout << "Point count: " << m_position.size() << "\n";
+    size_t p = 0;
+    for (size_t i = 0; i < m_contourEnd.size(); ++i)
+    {
+        std::cout << "Contour #" << i << ":\n";
+        for (size_t j = p; j < m_contourEnd[i]; ++j)
+        {
+            std::cout << "Point[" << j << "]: "
+                      << m_position[j] << " "
+                      << "[Control: " << m_isControlPoint[j];
+            if (m_isControlPoint[j])
+            {
+                std::cout << ", ThirdOrder: " << m_isThirdOrder[j];
+            }
+            std::cout << "]\n";
+        }
+        std::cout << "\n";
+        p = m_contourEnd[i];
+    }
+    std::cout << "\n";
 }

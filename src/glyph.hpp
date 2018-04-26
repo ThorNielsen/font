@@ -11,8 +11,10 @@ class Glyph
 public:
     Glyph(FT_Outline);
 
+    void dumpInfo() const;
+
 private:
-    std::vector<size_t> m_contourEnds;
+    std::vector<size_t> m_contourEnd;
     std::vector<ivec2> m_position;
     std::vector<bool> m_isControlPoint;
     std::vector<bool> m_isThirdOrder;

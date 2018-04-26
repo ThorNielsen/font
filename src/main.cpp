@@ -1,50 +1,11 @@
 #include "image.hpp"
 #include "freetype.hpp"
 #include "common.hpp"
+#include "glyph.hpp"
 
 #include <iostream>
 #include <sstream>
 #include <vector>
-
-std::ostream& operator<<(std::ostream& ost, FT_Vector vec)
-{
-    return ost << "FT_Vector{" << vec.x << ", " << vec.y << "}";
-}
-
-
-std::string decodeTag(U8 tag)
-{
-    std::stringstream ss;
-    ss << "Tag{";
-    ss << "OnCurve: " << bit<0>(tag);
-    if (!bit<0>(tag))
-    {
-        ss << " [" << (bit<1>(tag) ? "Third" : "Second") << " order]";
-    }
-    ss << "}";
-    return ss.str();
-}
-
-void dumpInfo(FT_Outline outline)
-{
-    std::cout << "=== Glyph data === \n";
-    std::cout << "Contour count: " << outline.n_contours << "\n";
-    std::cout << "Point count: " << outline.n_points << "\n";
-    short p = 0;
-    for (short i = 0; i < outline.n_contours; ++i)
-    {
-        std::cout << "Contour #" << i << ":\n";
-        for (short j = p; j <= outline.contours[i]; ++j)
-        {
-            std::cout << "Point[" << j << "]: "
-                      << outline.points[j] << " "
-                      << decodeTag(outline.tags[j])
-                      << "\n";
-        }
-        p = outline.contours[i]+1;
-    }
-}
-
 
 int main()
 {
@@ -85,7 +46,8 @@ int main()
     }
     writeImage(img);
 
-    dumpInfo(slot->outline);
+    Glyph glyph(slot->outline);
+    glyph.dumpInfo();
 
     checkFTError(FT_Done_FreeType(ftLib));
 }
