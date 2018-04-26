@@ -1,0 +1,8 @@
+/bin
+/obj
+*.[oa]
+*.depend
+*.layout
+ValgrindOut.xml
+*.pnm
+*.ttf
