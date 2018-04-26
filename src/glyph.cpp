@@ -1,5 +1,7 @@
 #include "glyph.hpp"
 #include "common.hpp"
+#include "matrix2.hpp"
+#include "primitives.hpp"
 
 #include <iostream>
 
@@ -13,7 +15,7 @@ Glyph::Glyph(FT_Outline outline)
     {
         m_position[i] = ivec2{static_cast<S32>(outline.points[i].x),
                               static_cast<S32>(outline.points[i].y)};
-        m_isControlPoint[i] = bit<0>(outline.tags[i]);
+        m_isControlPoint[i] = !bit<0>(outline.tags[i]);
         m_isThirdOrder[i] = bit<1>(outline.tags[i]);
     }
     for (short i = 0; i < outline.n_contours; ++i)
@@ -46,4 +48,67 @@ void Glyph::dumpInfo() const
         p = m_contourEnd[i];
     }
     std::cout << "\n";
+}
+
+bool intersects(Ray r, LineSegment l)
+{
+    auto invDet = l.dir.x * r.dir.y - l.dir.y * r.dir.x;
+    if (!invDet) // Degenerate case (parallel)
+    {
+        // Parallel lines.
+        return false;
+    }
+    imat2 m( r.dir.y, -r.dir.x,
+            -l.dir.y,  l.dir.x);
+    ivec2 coeffs = m * (r.pos - l.pos);
+    if (invDet < 0)
+    {
+        coeffs.x = -coeffs.x;
+        invDet = -invDet;
+    }
+    else
+    {
+        coeffs.y = -coeffs.y;
+    }
+    if (coeffs.y < 0)
+    {
+        // Line is behind ray.
+        return false;
+    }
+    if (coeffs.x < 0)
+    {
+        // Ray is below line segment.
+        return false;
+    }
+    if (invDet < coeffs.x)
+    {
+        // Ray is above line segment.
+        return false;
+    }
+    return true;
+}
+
+// Currently only handles line segments.
+bool Glyph::isInside(ivec2 pos) const
+{
+    size_t intersectCount = 0;
+    Ray testRay;
+    testRay.dir = {1, 1};
+    testRay.pos = pos;
+    size_t contourBegin = 0;
+    for (size_t i = 0; i < contours(); ++i)
+    {
+        size_t contourLength = contourEnd(i) - contourBegin;
+        if (contourLength < 3) continue; // Degenerate contour.
+        LineSegment cLine;
+        cLine.pos = position(contourBegin + contourLength - 1);
+        for (size_t j = contourBegin; j < contourEnd(i); ++j)
+        {
+            cLine.dir = position(j) - cLine.pos;
+            intersectCount += intersects(testRay, cLine);
+
+            cLine.pos = position(j);
+        }
+    }
+    return intersectCount & 1;
 }
