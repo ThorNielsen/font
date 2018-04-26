@@ -24,7 +24,7 @@ int main()
     // Slightly simpler: U+E5.
     // Even simpler: 'A'.
     // Simplest: 'H'.
-    auto idx = FT_Get_Char_Index(face, 'H');
+    auto idx = FT_Get_Char_Index(face, 'Z');
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_DEFAULT));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
@@ -48,15 +48,19 @@ int main()
 
     Glyph glyph(slot->outline);
     glyph.dumpInfo();
-    /*std::cout << glyph.isInside({192, 0}, {1, 0}) << std::endl;
-    std::cout << glyph.isInside({192, 0}, {-1, 0}) << std::endl;
-    std::cout << glyph.isInside({192, 0}, {0, 1}) << std::endl;
-    std::cout << glyph.isInside({192, 0}, {0, -1}) << std::endl;
+    ivec2 pos{198, 295};
+    //std::cout << glyph.isInside({1280, 704}, {1, 0}) << std::endl;
+    //std::cout << glyph.isInside({192, 0}, {1, 0}) << std::endl;
+    //std::cout << glyph.isInside({192, -1}, {1, 0}) << std::endl;
+    std::cout << glyph.isInside(pos, {1, 0}) << std::endl;
+    std::cout << glyph.isInside(pos, {-1, 0}) << std::endl;
+    std::cout << glyph.isInside(pos, {0, 1}) << std::endl;
+    std::cout << glyph.isInside(pos, {0, -1}) << std::endl;
     std::cout << std::endl;
-    std::cout << glyph.isInside({192, 0}, {1, 1}) << std::endl;
-    std::cout << glyph.isInside({192, 0}, {1, -1}) << std::endl;
-    std::cout << glyph.isInside({192, 0}, {-1, 1}) << std::endl;*/
-    std::cout << glyph.isInside({192, 0}, {-1, -1}) << std::endl;
+    std::cout << glyph.isInside(pos, {1, 1}) << std::endl;
+    std::cout << glyph.isInside(pos, {1, -1}) << std::endl;
+    std::cout << glyph.isInside(pos, {-1, 1}) << std::endl;
+    std::cout << glyph.isInside(pos, {-1, -1}) << std::endl;
 
     checkFTError(FT_Done_FreeType(ftLib));
 }

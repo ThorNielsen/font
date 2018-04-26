@@ -50,35 +50,54 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-int intersectionCount(Ray r, LineSegment l)
+bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
 {
-    auto invDet = l.dir.x * r.dir.y - l.dir.y * r.dir.x;
-    if (!invDet) // Degenerate case (parallel)
+    auto ad = l.pos - r.pos;
+    // Test whether ray beginning is on line segment.
+    if (ad.x * l.dir.y == ad.y * l.dir.x)
     {
-        auto ad = l.pos - r.pos;
-        if (ad.x * r.dir.y == ad.y * r.dir.x) // Same line
+        // Now we know that the ray starts on the line which l lies on. Now we
+        // need to know whether the ray start lies on the segment. We have the
+        // following possible configurations (L is a line, numeric is ray start
+        // possibilities, note that line segment is directed):
+        //         B       E
+        // L:      [->--->-]
+        // 0:  R
+        // 1:      R
+        // 2:          R
+        // 3:              R
+        // 4:                  R
+
+        auto lBegin = dot(l.pos, l.dir);
+        auto rPos = dot(r.pos, l.dir);
+        auto lEnd = dot(l.pos + l.dir, l.dir);
+        if (lBegin <= rPos)
         {
-            auto adrd = dot(ad, r.dir);
-            auto adldrd = adrd + dot(l.dir, r.dir);
-            if (dot(r.dir, l.dir) >= 0) // Same direction
+            // Case 1&2&3:
+            if (rPos <= lEnd)
             {
-                int ret = 0;
-                if (adrd > 0) ++ret;
-                if (adldrd > 0) ++ret;
-                std::cout << ret;
-                return ret;
+                rayBeginOnSegment = true;
+                return 1;
             }
-            else // Opposite direction
-            {
-                int ret = 0;
-                if (adrd <= 0) ++ret;
-                if (adldrd <= 0) ++ret;
-                std::cout << 8-ret;
-                return ret;
-            }
+            // Case 4, do nothing.
         }
-        // Parallel but non-intersecting.
-        std::cout << 'a';
+        // else: Case 0
+
+        // Test if ray has same direction as line segment:
+        if (ad.x * r.dir.y == ad.y * r.dir.x)
+        {
+            // We either have case 0 or case 4. RB and the ray have same
+            // direction then we have an intersection (actually infinitely
+            // many), otherwise not. Note that RB = l.pos - r.pos the ray's
+            // direction is simply r.dir.
+            return dot(l.pos - r.pos, r.dir) > 0;
+        }
+    }
+
+    auto invDet = l.dir.x * r.dir.y - l.dir.y * r.dir.x;
+    if (!invDet)
+    {
+        // They are parallel, but cannot be intersecting (tested before).
         return 0;
     }
     imat2 m( r.dir.y, -r.dir.x,
@@ -96,23 +115,19 @@ int intersectionCount(Ray r, LineSegment l)
     if (coeffs.y < 0)
     {
         // Line is behind ray.
-        std::cout << 'b';
         return 0;
     }
     if (coeffs.x < 0)
     {
         // Ray is below line segment.
-        std::cout << 'c';
         return 0;
     }
-    if (invDet < coeffs.x)
+    if (invDet <= coeffs.x)
     {
         // Ray is above line segment.
-        std::cout << 'd';
         return 0;
     }
     // Ray intersects line segment non-degenerately.
-    std::cout << 'e';
     return 1;
 }
 
@@ -133,10 +148,11 @@ bool Glyph::isInside(ivec2 pos, ivec2 dir) const
         for (size_t j = contourBegin; j < contourEnd(i); ++j)
         {
             cLine.dir = position(j) - cLine.pos;
-            intersectCount += intersectionCount(testRay, cLine);
-
+            bool rayBeginOnSegment = false;
+            intersectCount += intersects(testRay, cLine, rayBeginOnSegment);
+            if (rayBeginOnSegment) return true;
             cLine.pos = position(j);
         }
     }
-    return intersectCount & 1;
+    return intersectCount&1;
 }
