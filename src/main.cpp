@@ -24,7 +24,7 @@ int main()
     // Slightly simpler: U+E5.
     // Even simpler: 'A'.
     // Simplest: 'H'.
-    auto idx = FT_Get_Char_Index(face, 'o');
+    auto idx = FT_Get_Char_Index(face, 'Z');
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
@@ -49,6 +49,10 @@ int main()
     Glyph glyph(slot->outline, slot->metrics);
 
     glyph.dumpInfo();
+
+    img = render(glyph, 0, 32);
+    img.name = "Custom";
+    writeImage(img);
 
     checkFTError(FT_Done_FreeType(ftLib));
 }

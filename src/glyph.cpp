@@ -4,6 +4,7 @@
 #include "primitives.hpp"
 
 #include <iostream>
+#include <stdexcept>
 
 Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     : m_contourEnd(outline.n_contours),
@@ -170,4 +171,42 @@ bool Glyph::isInside(ivec2 pos, ivec2 dir) const
         }
     }
     return intersectCount&1;
+}
+
+
+Image render(const Glyph& glyph, int width, int height)
+{
+    if (width <= 0)
+    {
+        if (height <= 0)
+        {
+            throw std::runtime_error("Bad render size.");
+        }
+        width = (glyph.info().width*height + glyph.info().height-1)
+                / glyph.info().height;
+    }
+    else
+    {
+        height = (glyph.info().height*width + glyph.info().width-1)
+                 / glyph.info().width;
+    }
+    Image img(width, height);
+    for (int x = 0; x < width; ++x)
+    {
+        for (int y = 0; y < height; ++y)
+        {
+            ivec2 glyphPos;
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(width-1);
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(height-1);
+            if (glyph.isInside(glyphPos, ivec2{1, 0}))
+            {
+                img.setPixel(x, y, 0xffffff);
+            }
+            else
+            {
+                img.setPixel(x, y, 0x000000);
+            }
+        }
+    }
+    return img;
 }

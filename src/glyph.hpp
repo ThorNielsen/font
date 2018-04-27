@@ -2,6 +2,7 @@
 #define GLYPH_HPP_INCLUDED
 
 #include "freetype.hpp"
+#include "image.hpp"
 #include "vector2.hpp"
 
 #include <vector>
@@ -35,6 +36,7 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
+
     bool isInside(ivec2 pos, ivec2 dir) const;
 
     size_t contours() const { return m_contourEnd.size(); }
@@ -52,6 +54,9 @@ private:
     std::vector<bool> m_isThirdOrder;
     GlyphInfo m_info;
 };
+
+
+Image render(const Glyph& glyph, int width, int height);
 
 #endif // GLYPH_HPP_INCLUDED
 
