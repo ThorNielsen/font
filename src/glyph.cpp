@@ -173,6 +173,21 @@ bool Glyph::isInside(ivec2 pos, ivec2 dir) const
     return intersectCount&1;
 }
 
+FontInfo::FontInfo(FT_Face face)
+{
+    bboxMin.x = static_cast<int>(face->bbox.xMin);
+    bboxMin.y = static_cast<int>(face->bbox.yMin);
+    bboxMax.x = static_cast<int>(face->bbox.xMax);
+    bboxMax.y = static_cast<int>(face->bbox.yMax);
+    emSize = static_cast<int>(face->units_per_EM);
+    ascender = static_cast<int>(face->ascender);
+    descender = static_cast<int>(face->descender);
+    lineHeight = static_cast<int>(face->height);
+    maxAdvanceWidth = static_cast<int>(face->max_advance_width);
+    maxAdvanceHeight = static_cast<int>(face->max_advance_height);
+    underlinePosition = static_cast<int>(face->underline_position);
+    underlineThickness = static_cast<int>(face->underline_thickness);
+}
 
 Image render(const Glyph& glyph, int width, int height)
 {
@@ -191,6 +206,7 @@ Image render(const Glyph& glyph, int width, int height)
                  / glyph.info().width;
     }
     Image img(width, height);
+
     for (int x = 0; x < width; ++x)
     {
         for (int y = 0; y < height; ++y)

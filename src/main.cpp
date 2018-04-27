@@ -24,7 +24,7 @@ int main()
     // Slightly simpler: U+E5.
     // Even simpler: 'A'.
     // Simplest: 'H'.
-    auto idx = FT_Get_Char_Index(face, 'Z');
+    auto idx = FT_Get_Char_Index(face, 'H');
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 

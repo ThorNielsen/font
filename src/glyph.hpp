@@ -55,6 +55,30 @@ private:
     GlyphInfo m_info;
 };
 
+struct FontInfo
+{
+    FontInfo(FT_Face);
+    // Bounding box large enough to contain all glyphs in the font (not at once,
+    // of course).
+    ivec2 bboxMin; // Bottom left.
+    ivec2 bboxMax; // Top right.
+    int emSize; // Size of EM square (EM units).
+    int ascender; // Vertical distance from horizontal baseline to highest
+                  // character coordinate in font. May not be reliable.
+    int descender;// Vertical distance from horizontal baseline to lowest
+                  // character coordinate in font. Negative if below baseline.
+                  // May not be reliable.
+    int lineHeight; // Default spacing between two lines.
+    int maxAdvanceWidth;
+    int maxAdvanceHeight;
+    int underlinePosition; // Underline position relative to baseline. Negative
+                           // if below. Note that this position is the CENTER of
+                           // the underline - i.e. the underline's vertical
+                           // extents is [pos-thickness/2, pos+thickness/2]
+                           // (account for truncation, of course).
+    int underlineThickness;
+};
+
 
 Image render(const Glyph& glyph, int width, int height);
 
