@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-Glyph::Glyph(FT_Outline outline)
+Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     : m_contourEnd(outline.n_contours),
       m_position(outline.n_points),
       m_isControlPoint(outline.n_points),
@@ -22,11 +22,26 @@ Glyph::Glyph(FT_Outline outline)
     {
         m_contourEnd[i] = outline.contours[i]+1;
     }
+    m_info.width = static_cast<int>(metrics.width);
+    m_info.height = static_cast<int>(metrics.height);
+    m_info.hCursorX = static_cast<int>(metrics.horiBearingX);
+    m_info.hCursorY = static_cast<int>(metrics.horiBearingY);
+    m_info.xAdvance = static_cast<int>(metrics.horiAdvance);
+    m_info.vCursorX = static_cast<int>(metrics.vertBearingX);
+    m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
+    m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
 }
 
 void Glyph::dumpInfo() const
 {
     std::cout << "=== Glyph outline ===\n";
+    std::cout << "BBox: " << m_info.width << "x" << m_info.height << "\n";
+    std::cout << "Horizontal mode offset: (" << m_info.hCursorX << ", "
+              << m_info.hCursorY << ")\n";
+    std::cout << "Horizontal mode advance: " << m_info.xAdvance << "\n";
+    std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
+              << m_info.vCursorY << ")\n";
+    std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
     std::cout << "Contour count: " << m_contourEnd.size() << "\n";
     std::cout << "Point count: " << m_position.size() << "\n";
     size_t p = 0;

@@ -14,8 +14,8 @@ struct Colour
     Colour() : r{0}, g{0}, b{0}, a{255} {}
     Colour(U8 rx, U8 gx, U8 bx) : r{rx}, g{gx}, b{bx}, a{255} {}
     Colour(U8 rx, U8 gx, U8 bx, U8 ax) : r{rx}, g{gx}, b{bx}, a{ax} {}
-    Colour(U32 c) : r((c&0xFF0000)>>16),
-                    g((c&0xFF00)>>8),
+    Colour(U32 c) : r((c>>16)&0xFF),
+                    g((c>>8)&0xFF),
                     b(c&0xFF),
                     a{255} {}
 };
