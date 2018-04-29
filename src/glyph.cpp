@@ -382,7 +382,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     // This can be seen by noting that only E*t^2 matters asymptotically, and
     // therefore  E > 0  gives that for some t,  p(t) > 0  . Since  H < 0
     // p(t) != 0  for all  t  and as  p(t)  is continuous, it must be positive
-    // everywhere. Therefore our solutions are correct.
+    // everywhere. Therefore our solutions will be correct.
     if (E > 0 && H <= 0) return sol+solSub;
     // Likewise, if  E < 0  and  H < 0  ,  p(t) < 0  no matter the value of t.
     if (E < 0 && H < 0) return 0;
@@ -407,40 +407,6 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
             if (A*F*B <= 2*A*A*G) return sol;
             return 0;
         }
-        // D is non-zero. We check whether the plus solution is good:
-        // F(-B/2A+sqrt(D)/2A) >= -G          <=>
-        // BF/2A-sqrt(D)/2A    <= G           <=>
-        // BF/2A-G             <= sqrt(D)/2A  <=>
-        // 2ABF-4A^2*G         <= 2A*sqrt(D)  <=>
-        // ABF-2A^2*G          <= A*sqrt(D)
-    }
-    // We rewrite  p(t)  to  p(t) = t(Et+F)+G  .
-    // We insert the plus solution (t = -B/2A+sqrt(D)/2A):
-    // (-B/2A+sqrt(D)/2A)*(E*(-B/2A+sqrt(D)/2A)+F)+G >= 0            <=>
-    // (-B+sqrt(D))/2A*(E*(-B+sqrt(D))/2A+F)+G       >= 0            <=>
-    // (-B+sqrt(D))*(E*(-B+sqrt(D))+2AF)+4A^2*G      >= 0            <=>
-    // E(-B+sqrt(D))^2+2AF(-B+sqrt(D))               >= -4A^2*G      <=>
-    // E(B^2+D-2B*sqrt(D))-2ABF+2AF*sqrt(D)          >= -4A^2*G      <=>
-    // B^2*E+ED-2BE*sqrt(D)+2AF*sqrt(D)              >= 2ABF-4A^2*G  <=>
-    // 2*sqrt(D)*(AF-BE) >= 2ABF-4A^2*G-B^2*E-DE      <=>
-    // 2*sqrt(D)*(AF-BE) >= 2ABF-4A^2*G-2B^2*E+4ACE   <=>
-    // sqrt(D)*(AF-BE)   >= ABF-2A^2*G-B^2*E+2ACE     <=>
-    // sqrt(D)*(AF-BE)   >= A(BF+2(CE-AG))-B^2*E  =: S
-    auto S = 2*A*(B*F+2*(C*E-A*G))-B*B*E;
-    // sqrt(D)*(AF-BE)   >= S
-    // Now we have four cases:
-    //   AF-BE >= 0, S <= 0     ->   true.
-    //   AF-BE >= 0, S >  0
-    //   ->  true iff D*(AF-BE) >= S^2
-    //   AF-BE < 0, S >= 0      ->   true.
-    //   AF-BE < 0, S <  0
-    //   -> true iff D*(AF-BE) <= S^2
-    if (sol)
-    {
-        sol = false;
-        auto AFBE = A*F-B*E;
-        if (AFBE >= 0 && (S <= 0 || D*AFBE > S*S)) sol = true;
-        if (AFBE < 0 && (S >= 0 || D*AFBE < S*S)) sol = true;
     }
     // Let # be shorthand for +- (and -# is then -+). The solutions can now be
     // written as  -B/2A#sqrt(D)/2A  . We now insert that into  p(t):
