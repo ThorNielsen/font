@@ -301,6 +301,36 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
             }
         }
     }
+    if (A < 0)
+    {
+        // Again we have two potential solutions. This time we need to remember
+        // to flip the inequality whenever we divide or multiply by A.
+
+        // Starting with the positive solution:
+        // 0 <= -B/2A + sqrt(D)/2A < 1  <=>
+        // 0 >= -B + sqrt(D) > 2A       <=>
+        // B >= sqrt(D) > 2A-B
+
+        // Taking the first one:
+        // B >= sqrt(D)  is true iff B > 0 and
+        // B^2 >= D          <=>
+        // B^2 >= B^2 - 4AC  <=>
+        // 0   >= -4AC       <=>
+        // 0   >= C
+        // That is,  B >= sqrt(D) iff (B > 0) and (C <= 0)
+
+        // The second inequality:
+        // sqrt(D) > 2A-B  is true iff 2A-B <= 0 or
+        // D    > 4A^2+B^2-4AB  <=>
+        // -4AC > 4A^2-4AB      <=>
+        // 0    > 4A^2-4AB+4AC  <=>
+        // 0    < A-B+C
+        // That is,  sqrt(D) > 2A-B iff (2A-B <= 0) or (0 < A-B+C)
+        if ((B > 0) && (C <= 0) && ((2*A-B <= 0) || (0 < A-B+C)))
+        {
+            sol = true;
+        }
+    }
 }
 
 // Currently only handles line segments.
