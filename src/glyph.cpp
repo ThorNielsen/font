@@ -269,6 +269,36 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
                 // The plus root satisfies the constraints on t.
                 sol = true;
             }
+
+
+            // Now we look at the minus root. We get that it satisfies the t-
+            // constraints iff:
+            // 0 <= -B/2A - sqrt(D)/2A < 1   <=>
+            // 0 <= -B - sqrt(D)       < 2A  <=>
+            // B <= -sqrt(D) < 2A+B
+            // Again we split this up in two.
+
+            // Looking at  B <= -sqrt(D)  we get that B < 0 and:
+            // B   <= -sqrt(D)  <=>
+            // B^2 >= D         <=>
+            // B^2 >= B^2-4AC   <=>
+            // 0   >= -4AC      <=>
+            // 0   <= C
+            // Therefore  B <= -sqrt(D) iff (B < 0) and (C >= 0)  .
+
+            // Looking at  -sqrt(D) < 2A+B  we again get two cases:
+            // 2A+B >= 0  in which case it is true and
+            // 2A+B < 0  in which case
+            //   -sqrt(D) < 2A+B          <=>
+            //   D        > 4A^2+4AB+B^2  <=>
+            //   B^2-4AC  > 4A^2+4AB+B^2  <=>
+            //   0        > 4A^2+4AB+4AC  <=>
+            //   0        > A+B+C
+            // Therefore  -sqrt(D) < 2A+B iff (2A+B >= 0) or (A+B+C < 0)
+            if ((B < 0) && (C >= 0) && ((2*A+B >= 0) || (A+B+C < 0)))
+            {
+                solSub = true;
+            }
         }
     }
 }
