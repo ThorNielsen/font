@@ -200,11 +200,11 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     auto D = B*B-4*A*C;
     // Of course, if the discriminant is negative, we have no solutions. The
     // situation will look like this:
-    //    \     \
-    //      \    |
-    //       |    \
-    //      /      |
-    //    /         \
+    //    *     '
+    //      *    '
+    //       *    '
+    //      *      '
+    //    *         '
     // Bezier      Line, which contains ray
     if (D < 0) return 0;
 
@@ -358,6 +358,121 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
             solSub = true;
         }
     }
+
+    // Now we know all solutions where the line intersects the curve. If there
+    // are none, the curve and ray will not intersect.
+    if (sol + solSub == 0) return 0;
+    // If there are some solutions we still don't know whether they are on the
+    // ray. Remember that s = c^{-1}((e-2g+j)t^2+2(g-e)t+e-a). To see if our
+    // solutions lie on the ray, we need to check that s >= 0, that is:
+    // c^{-1}((e-2g+j)t^2+2(g-e)t+e-a) >= 0  .
+    // We note that  c^{-1} > 0 iff c > 0. Therefore the above inequality
+    // simplifies to:
+    // c((e-2g+j)t^2+2(g-e)t+e-a) >= 0  .
+
+    // We wish to see for which t the polynomial above is positive. So we need
+    // to solve it and check that our t's indeed lie such that it is positive.
+    // By setting
+    auto E = c*(e-2*g+j);
+    auto F = c*(2*(g-e));
+    auto G = c*(e-a);
+    auto H = F*F-4*E*G;
+    // the inequality can be written as  p(t) = Et^2 + Ft + G >= 0  . We note
+    // that if  E > 0  and  H <= 0  we get  p(t) >= 0 no matter the value of t.
+    // This can be seen by noting that only E*t^2 matters asymptotically, and
+    // therefore  E > 0  gives that for some t,  p(t) > 0  . Since  H < 0
+    // p(t) != 0  for all  t  and as  p(t)  is continuous, it must be positive
+    // everywhere. Therefore our solutions are correct.
+    if (E > 0 && H <= 0) return sol+solSub;
+    // Likewise, if  E < 0  and  H < 0  ,  p(t) < 0  no matter the value of t.
+    if (E < 0 && H < 0) return 0;
+
+    // We start by dealing with specific degenerate cases (the easy ones).
+    if (E == 0)
+    {
+        if (F == 0)
+        {
+            // p(t) >= 0  degenerates to  G >= 0
+            if (G >= 0) return sol+solSub;
+            return 0;
+        }
+        // p(t) >= 0  degenerates to  Ft+G >= 0 iff Ft >= -G.
+        if (D == 0)
+        {
+            // We have only one solution: t = -B/2A. It is a solution if:
+            // F*(-B/2A) >= -G      <=>
+            // F*B/2A    <= G       <=>
+            // 2A*F*B    <= 4A^2*G  <=>
+            // A*F*B     <= 2A^2*G
+            if (A*F*B <= 2*A*A*G) return sol;
+            return 0;
+        }
+        // D is non-zero. We check whether the plus solution is good:
+        // F(-B/2A+sqrt(D)/2A) >= -G          <=>
+        // BF/2A-sqrt(D)/2A    <= G           <=>
+        // BF/2A-G             <= sqrt(D)/2A  <=>
+        // 2ABF-4A^2*G         <= 2A*sqrt(D)  <=>
+        // ABF-2A^2*G          <= A*sqrt(D)
+    }
+    // We rewrite  p(t)  to  p(t) = t(Et+F)+G  .
+    // We insert the plus solution (t = -B/2A+sqrt(D)/2A):
+    // (-B/2A+sqrt(D)/2A)*(E*(-B/2A+sqrt(D)/2A)+F)+G >= 0            <=>
+    // (-B+sqrt(D))/2A*(E*(-B+sqrt(D))/2A+F)+G       >= 0            <=>
+    // (-B+sqrt(D))*(E*(-B+sqrt(D))+2AF)+4A^2*G      >= 0            <=>
+    // E(-B+sqrt(D))^2+2AF(-B+sqrt(D))               >= -4A^2*G      <=>
+    // E(B^2+D-2B*sqrt(D))-2ABF+2AF*sqrt(D)          >= -4A^2*G      <=>
+    // B^2*E+ED-2BE*sqrt(D)+2AF*sqrt(D)              >= 2ABF-4A^2*G  <=>
+    // 2*sqrt(D)*(AF-BE) >= 2ABF-4A^2*G-B^2*E-DE      <=>
+    // 2*sqrt(D)*(AF-BE) >= 2ABF-4A^2*G-2B^2*E+4ACE   <=>
+    // sqrt(D)*(AF-BE)   >= ABF-2A^2*G-B^2*E+2ACE     <=>
+    // sqrt(D)*(AF-BE)   >= A(BF+2(CE-AG))-B^2*E  =: S
+    auto S = 2*A*(B*F+2*(C*E-A*G))-B*B*E;
+    // sqrt(D)*(AF-BE)   >= S
+    // Now we have four cases:
+    //   AF-BE >= 0, S <= 0     ->   true.
+    //   AF-BE >= 0, S >  0
+    //   ->  true iff D*(AF-BE) >= S^2
+    //   AF-BE < 0, S >= 0      ->   true.
+    //   AF-BE < 0, S <  0
+    //   -> true iff D*(AF-BE) <= S^2
+    if (sol)
+    {
+        sol = false;
+        auto AFBE = A*F-B*E;
+        if (AFBE >= 0 && (S <= 0 || D*AFBE > S*S)) sol = true;
+        if (AFBE < 0 && (S >= 0 || D*AFBE < S*S)) sol = true;
+    }
+    // Let # be shorthand for +- (and -# is then -+). The solutions can now be
+    // written as  -B/2A#sqrt(D)/2A  . We now insert that into  p(t):
+    // E(-B/2A#sqrt(D)/2A)^2+F(-B/2A#sqrt(D)/2A)+G    >= 0             <=>
+    // E(-B#sqrt(D))^2+2AF(-B#sqrt(D))+4A^2G          >= 0             <=>
+    // E(B^2+D-#2B*sqrt(D))-2ABF#2AF*sqrt(D)+4A^2G    >= 0             <=>
+    // E(2B^2-4AC-#2B*sqrt(D))-2ABF#2AF*sqrt(D)+4A^2G >= 0             <=>
+    // E(B^2-2AC-#B*sqrt(D))-ABF#AF*sqrt(D)+2A^2G     >= 0             <=>
+    // B^2*E - 2ACE -# BE*sqrt(D) # AF*sqrt(D)        >= ABF - 2A^2*G  <=>
+    // (#sqrt(D))*(AF-BE) >= ABF + 2ACE - 2A^2*G - B^2*E  <=>
+    // (#sqrt(D))*(AF-BE) >= A(BF+2(CE-AG))-B^2*E   =: S
+    auto S = A*(B*F+2*(C*E-A*G))-B*B*E;
+    auto L = A*F-B*E;
+    // (#sqrt(D))*L >= S
+    // Now we start looking at +sqrt(D):
+    // if L >= 0 then:
+    //   S <= 0 or (S > 0 && D*L^2 > S^2)  <=> plus is a root.
+    // if L < 0 then:
+    //   (S <= 0 && D*L^2 <= S^2)  <=> plus is a root.
+    if (L >= 0 && !(S <= 0 || (S > 0 && D*L*L > S*S))) sol = false;
+    if (L < 0 && !(S <= 0 && D*L*L <= S*S)) sol = false;
+
+    // Now look at -sqrt(D):
+    // We get sqrt(D)*L <= -S
+    // if L > 0 then:
+    //   (S <= 0 && D*L^2 <= S^2)  <=> minus is a root
+    // if L <= 0 then:
+    //   S <= 0 or (S > 0 && D*L^2 >= S*S)  <=> minus is a root
+    if (L > 0 && !(S <= 0 && D*L*L <= S*S)) solSub = false;
+    if (L <= 0 && !(S <= 0 || (S > 0 && D*L*L >= S*S))) solSub = false;
+
+    return sol+solSub;
 }
 
 // Currently only handles line segments.
