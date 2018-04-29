@@ -486,31 +486,32 @@ FontInfo::FontInfo(FT_Face face)
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
     int pixelWidth, pixelHeight;
-    (void)(info);
     if (width <= 0)
     {
         if (height <= 0)
         {
             throw std::runtime_error("Bad render size.");
         }
-        pixelHeight = (height * glyph.height) / info.emSize;
-        pixelWidth = (pixelHeight * width) / height;
+        pixelHeight = (height * glyph.info().height) / info.emSize;
+        if (pixelHeight < 2) pixelHeight = 2;
+        pixelWidth = pixelHeight * glyph.info().width / glyph.info().height;
     }
     else
     {
-        height = (glyph.info().height*width + glyph.info().width-1)
-                 / glyph.info().width;
+        pixelWidth = (width * glyph.info().width) / info.emSize;
+        if (pixelWidth < 2) pixelWidth = 2;
+        pixelHeight = pixelWidth * glyph.info().height / glyph.info().width;
     }
 
-    Image img(width, height);
+    Image img(pixelWidth, pixelHeight);
 
-    for (int x = 0; x < width; ++x)
+    for (int x = 0; x < pixelWidth; ++x)
     {
-        for (int y = 0; y < height; ++y)
+        for (int y = 0; y < pixelHeight; ++y)
         {
             ivec2 glyphPos;
-            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(width-1);
-            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(height-1);
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
             if (glyph.isInside(glyphPos, ivec2{1, 0}))
             {
                 img.setPixel(x, y, 0xffffff);
