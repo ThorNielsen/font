@@ -47,10 +47,11 @@ int main()
     writeImage(img);
 
     Glyph glyph(slot->outline, slot->metrics);
+    FontInfo info(face);
 
     glyph.dumpInfo();
 
-    img = render(glyph, 0, 32);
+    img = render(info, glyph, 0, 32);
     img.name = "Custom";
     writeImage(img);
 

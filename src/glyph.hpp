@@ -12,8 +12,8 @@ class Glyph
 public:
     struct GlyphInfo
     {
-        int width; // Bounding box width
-        int height; // Bounding box height
+        int width; // Bounding box width in grid units
+        int height; // Bounding box height in grid units
         // For horizontal text layouts:
         int hCursorX; // Horizontal distance from cursor position to leftmost
                       // border of the bounding box.
@@ -80,7 +80,7 @@ struct FontInfo
 };
 
 
-Image render(const Glyph& glyph, int width, int height);
+Image render(const FontInfo& info, const Glyph& glyph, int width, int height);
 
 #endif // GLYPH_HPP_INCLUDED
 

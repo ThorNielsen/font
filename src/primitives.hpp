@@ -23,5 +23,15 @@ struct LineSegment_t
 
 using LineSegment = LineSegment_t<S32>;
 
+template <typename T>
+struct QuadraticBezier_t
+{
+    vec2_t<T> p0;
+    vec2_t<T> p1;
+    vec2_t<T> p2;
+};
+
+using QuadraticBezier = QuadraticBezier_t<S32>;
+
 #endif // PRIMITIVES_HPP_INCLUDED
 

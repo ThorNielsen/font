@@ -147,6 +147,132 @@ bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
     return 1;
 }
 
+// This finds the number of intersections between a ray and a bezier curve using
+// only integer operations (and comparisons and control flow and variables).
+// The derivations are quite complicated (not very difficult, just numerous and
+// time-consuming) so I have probably made a mistake somewhere. The derivations
+// are included below to assist in fixing any potential problems and to better
+// describe what is going on where.
+int intersectionCount(Ray ray, QuadraticBezier qb)
+{
+    // Extract coefficients from ray and bezier curve:
+    auto a = ray.pos.x; auto c = ray.dir.x;
+    auto b = ray.pos.y; auto d = ray.dir.y;
+    // The ray can now be written parametrically as:
+    // x(s) = a+s*c
+    // y(s) = b+s*d
+    // For s >= 0.
+    auto e = qb.p0.x; auto g = qb.p1.x; auto j = qb.p2.x;
+    auto f = qb.p0.y; auto h = qb.p1.y; auto k = qb.p2.y;
+    // Note that the bezier curve can now be written parametrically as:
+    // x(t) = (e-2g+j)t^2+2(g-e)t+e
+    // y(t) = (f-2h+k)t^2+2(h-f)t+f
+    // For 0 <= t < 1. Note that the last inequality must be sharp since an
+    // intersection at an endpoint would also be an intersection at the
+    // beginning of the next curve leading to two intersections in a single
+    // point.
+    // To find the intersection count we simply need to find the number of
+    // solutions to the following equations:
+    // a+sc=(e-2g+j)t^2+2(g-e)t+e
+    // b+sd=(f-2h+k)t^2+2(h-f)t+f
+    // Of course, we must make sure that the parameters are in range, so a
+    // solution (s, t) to the above is valid iff s >= 0 and 0 <= t < 1.
+    // First we isolate s:
+    // s = c^{-1}((e-2g+j)t^2+2(g-e)t+e-a)
+    // Note that we have assumed that c is invertible. However if it is not, we
+    // can simply flip the coefficients since the equations are symmetric.
+    if (c == 0)
+    {
+        // However what if d is zero as well? Then we have a degenerate ray, so
+        // we simply return zero intersections (we could of course test if the
+        // ray's origin lies on the curve, but giving a degenerate ray is
+        // probably a bug).
+        if (d == 0) return 0;
+        std::swap(a, b); std::swap(c, d);
+        std::swap(e, f); std::swap(g, h); std::swap(j, k);
+    }
+    // Now we can proceed. We insert s in the second equation and re-arranging,
+    // we get  At^2+Bt+C=0  where
+    auto A = d*(e-2*g+j)-c*(f-2*h+k);
+    auto B = 2*(d*(g-e)-c*(h-f));
+    auto C = c*(b-f)+d*(e-a);
+    // are the ugly coefficients. Now we calculate the discriminant:
+    auto D = B*B-4*A*C;
+    // Of course, if the discriminant is negative, we have no solutions. The
+    // situation will look like this:
+    //    \     \
+    //      \    |
+    //       |    \
+    //      /      |
+    //    /         \
+    // Bezier      Line, which contains ray
+    if (D < 0) return 0;
+
+    // Depending on whether D = 0 or D > 0, the line and infinitely extended
+    // bezier curve intersects somewhere in one or two points, respectively.
+    // However, we need 0 <= t < 1 and s >= 0. Since we have the coefficients
+    // for At^2+Bt+C=0, we start with t. Note that we do not want to bring
+    // floating-point arithmetic into this so we rearrange until we get integer
+    // inequalities.
+
+    // We need to remember which of our solutions satisfies the parameter
+    // constraints.
+    // If D = 0, sol holds the single solution. Otherwise:
+    bool sol = false;    // Is  -B/2A + sqrt(D)/2A  a valid t? [Plus solution]
+    bool solSub = false; // Is  -B/2A - sqrt(D)/2A  a valid t? [Minus solution]
+
+    // We look at the case where A > 0. The case where A < 0 will be handled
+    // later. Please note that A != 0 since the bezier curve would otherwise be
+    // a line segment, a case which is caught in pre-processing.
+    if (A > 0)
+    {
+        // If D=0 we only have one solution and therefore we get t=-B/2A. This
+        // can be rearranged as follows:
+        // 0 <= t < 1      <=>
+        // 0 <= -B/2A < 1  <=>
+        // 0 <= -B < 2A
+        if (D == 0)
+        {
+            if (0 <= -B && -B < 2*A) sol = true;
+        }
+        else // D > 0
+        {
+            // We have two potential solutions. Let us look at plus:
+            // 0 <= -B/2A + sqrt(D)/2A < 1  <=>
+            // 0 <= -B+sqrt(D) < 2A         <=>
+            // B <= sqrt(D) < 2A+B
+
+            // First we look at B <= sqrt(D):
+            //   if B >= 0 then
+            //     B   <= sqrt(D)  <=>
+            //     B^2 <= D        <=>
+            //     0   <= -4AC     <=>
+            //     0   >= C
+            //   if B < 0 then
+            //     B <= sqrt(D)
+            //     is simply true.
+            // To sum up, the  B <= sqrt(D)  is satisfied iff:
+            // [(B >= 0) and (C <= 0)] or (B <= 0)
+            // This reduces further to  (B <= 0) or (C <= 0)  .
+
+            // Onwards to the second equation,  sqrt(D) < 2A+B  .
+            // If  2A+B <= 0  , this cannot be true. Otherwise we can simply
+            // square both sides and obtain:
+            // D    < 4A^2+4AB+B^2  <=>
+            // -4AC < 4A^2+4AB      <=>
+            // 0    < 4A^2+4AB+4AC  <=>
+            // 0    < A+B+C
+            // Giving that  sqrt(D) < 2A+B  is satisfied iff:
+            // (2A+B > 0) and (A+B+C > 0)
+            if (((B <= 0) || (C <= 0)) && (2*A+B > 0) && (A+B+C > 0))
+            {
+                // The plus root satisfies the constraints on t.
+                sol = true;
+            }
+        }
+    }
+}
+
 // Currently only handles line segments.
 bool Glyph::isInside(ivec2 pos, ivec2 dir) const
 {
@@ -189,22 +315,25 @@ FontInfo::FontInfo(FT_Face face)
     underlineThickness = static_cast<int>(face->underline_thickness);
 }
 
-Image render(const Glyph& glyph, int width, int height)
+Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
+    int pixelWidth, pixelHeight;
+    (void)(info);
     if (width <= 0)
     {
         if (height <= 0)
         {
             throw std::runtime_error("Bad render size.");
         }
-        width = (glyph.info().width*height + glyph.info().height-1)
-                / glyph.info().height;
+        pixelHeight = (height * glyph.height) / info.emSize;
+        pixelWidth = (pixelHeight * width) / height;
     }
     else
     {
         height = (glyph.info().height*width + glyph.info().width-1)
                  / glyph.info().width;
     }
+
     Image img(width, height);
 
     for (int x = 0; x < width; ++x)
