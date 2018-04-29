@@ -273,9 +273,9 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
 
             // Now we look at the minus root. We get that it satisfies the t-
             // constraints iff:
-            // 0 <= -B/2A - sqrt(D)/2A < 1   <=>
-            // 0 <= -B - sqrt(D)       < 2A  <=>
-            // B <= -sqrt(D) < 2A+B
+            // 0 <= -B/2A - sqrt(D)/2A < 1     <=>
+            // 0 <= -B - sqrt(D)       < 2A    <=>
+            // B <= -sqrt(D)           < 2A+B
             // Again we split this up in two.
 
             // Looking at  B <= -sqrt(D)  we get that B < 0 and:
@@ -294,7 +294,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
             //   B^2-4AC  > 4A^2+4AB+B^2  <=>
             //   0        > 4A^2+4AB+4AC  <=>
             //   0        > A+B+C
-            // Therefore  -sqrt(D) < 2A+B iff (2A+B >= 0) or (A+B+C < 0)
+            // Therefore  -sqrt(D) < 2A+B iff (2A+B >= 0) or (A+B+C < 0)  .
             if ((B < 0) && (C >= 0) && ((2*A+B >= 0) || (A+B+C < 0)))
             {
                 solSub = true;
@@ -306,10 +306,10 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
         // Again we have two potential solutions. This time we need to remember
         // to flip the inequality whenever we divide or multiply by A.
 
-        // Starting with the positive solution:
-        // 0 <= -B/2A + sqrt(D)/2A < 1  <=>
-        // 0 >= -B + sqrt(D) > 2A       <=>
-        // B >= sqrt(D) > 2A-B
+        // Starting with the plus solution:
+        // 0 <= -B/2A + sqrt(D)/2A < 1     <=>
+        // 0 >=    -B + sqrt(D)    > 2A    <=>
+        // B >=         sqrt(D)    > 2A-B
 
         // Taking the first one:
         // B >= sqrt(D)  is true iff B > 0 and
@@ -317,7 +317,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
         // B^2 >= B^2 - 4AC  <=>
         // 0   >= -4AC       <=>
         // 0   >= C
-        // That is,  B >= sqrt(D) iff (B > 0) and (C <= 0)
+        // That is,  B >= sqrt(D) iff (B > 0) and (C <= 0)  .
 
         // The second inequality:
         // sqrt(D) > 2A-B  is true iff 2A-B <= 0 or
@@ -325,10 +325,37 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
         // -4AC > 4A^2-4AB      <=>
         // 0    > 4A^2-4AB+4AC  <=>
         // 0    < A-B+C
-        // That is,  sqrt(D) > 2A-B iff (2A-B <= 0) or (0 < A-B+C)
+        // That is,  sqrt(D) > 2A-B iff (2A-B <= 0) or (0 < A-B+C)  .
         if ((B > 0) && (C <= 0) && ((2*A-B <= 0) || (0 < A-B+C)))
         {
             sol = true;
+        }
+
+
+        // The minus solution now gives us:
+        // 0  <= -B/2A - sqrt(D)/2A < 1     <=>
+        // 0  >=    -B - sqrt(D)    > 2A    <=>
+        // 0  <=     B + sqrt(D)    < 2A    <=>
+        // -B <=         sqrt(D)    < 2A-B
+
+        // The first one:
+        // -B <= sqrt(D)  is true iff B >= 0 or
+        // B^2 <= D        <=>
+        // B^2 <= B^2-4AC  <=>
+        // 0   <= -4AC     <=>
+        // 0   <= C
+        // That is,  -B <= sqrt(D) iff (B >= 0) or (C >= 0)  .
+
+        // The second one:
+        // sqrt(D) < 2A-B  is true iff 2A-B > 0 and
+        // D    < 4A^2+B^2-4AB  <=>
+        // -4AC < 4A^2-4AB      <=>
+        // 0    < 4A^2-4AB+4AC  <=>
+        // 0    > A-B+C
+        // That is,  sqrt(D) < 2A-B <=> (2A-B > 0) and (A-B+C < 0)  .
+        if (((B >= 0) || (C >= 0)) && (2*A-B > 0) && (A-B+C) < 0)
+        {
+            solSub = true;
         }
     }
 }
