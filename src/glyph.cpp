@@ -10,7 +10,8 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     : m_contourEnd(outline.n_contours),
       m_position(outline.n_points),
       m_isControlPoint(outline.n_points),
-      m_isThirdOrder(outline.n_points)
+      m_isThirdOrder(outline.n_points),
+      m_zeroAcceptable(outline.n_points)
 {
     for (short i = 0; i < outline.n_points; ++i)
     {
@@ -31,6 +32,48 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.vCursorX = static_cast<int>(metrics.vertBearingX);
     m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
+    computeUsableZeroes();
+}
+
+bool Glyph::isInitialPositive(size_t cBegin, size_t contourID)
+{
+    auto prevY = position(contourEnd(contourID) - 1).y;
+    for (size_t j = contourEnd(contourID)-1; j > cBegin; --j)
+    {
+        auto currY = position(j).y;
+
+        // Note that we iterate backwards, so index(prevY) > index(currY).
+        if (auto yDiff = prevY - currY)
+        {
+            return yDiff > 0;
+        }
+        prevY = currY;
+    }
+    throw std::runtime_error("Bad contour");
+}
+
+void Glyph::computeUsableZeroes()
+{
+    size_t cBegin = 0;
+    for (size_t i = 0; i < contours(); ++i)
+    {
+        auto cLength = contourEnd(i) - cBegin;
+        LineSegment cLine;
+        cLine.pos = position(cBegin + cLength - 1);
+        auto prevPositive = isInitialPositive(cBegin, i);
+        for (size_t j = 0; j < contourEnd(i); ++j)
+        {
+            cLine.dir = position(j) - cLine.pos;
+            if (!cLine.dir.y) m_zeroAcceptable[j] = false;
+            else
+            {
+                m_zeroAcceptable[j] = (cLine.dir.y > 0) == prevPositive;
+                prevPositive = cLine.dir.y > 0;
+            }
+            cLine.pos = position(j);
+        }
+        cBegin = contourEnd(i);
+    }
 }
 
 void Glyph::dumpInfo() const
@@ -58,6 +101,7 @@ void Glyph::dumpInfo() const
             {
                 std::cout << ", ThirdOrder: " << m_isThirdOrder[j];
             }
+            std::cout << ", ZeroOK: " << m_zeroAcceptable[j];
             std::cout << "]\n";
         }
         std::cout << "\n";
@@ -66,7 +110,10 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
+bool intersects(Ray r,
+                LineSegment l,
+                bool& rayBeginOnSegment,
+                bool zeroHitAcceptable)
 {
     auto ad = l.pos - r.pos;
     // Test whether ray beginning is on line segment.
@@ -89,7 +136,9 @@ bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
         auto lEnd = dot(l.pos + l.dir, l.dir);
         if (lBegin <= rPos)
         {
-            // Case 1&2&3:
+            // Case 1:
+            if (rPos == lBegin) return zeroHitAcceptable;
+            // Case 2&3:
             if (rPos <= lEnd)
             {
                 rayBeginOnSegment = true;
@@ -147,6 +196,9 @@ bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
     return 1;
 }
 
+#define RETURN(x) return (x)
+
+
 // This finds the number of intersections between a ray and a bezier curve using
 // only integer operations (and comparisons and control flow and variables).
 // The derivations are quite complicated (not very difficult, just numerous and
@@ -155,26 +207,70 @@ bool intersects(Ray r, LineSegment l, bool& rayBeginOnSegment)
 // describe what is going on where.
 int intersectionCount(Ray ray, QuadraticBezier qb)
 {
+    std::cout << "Utilised!\n";
+    using Prec = S32;
     // Extract coefficients from ray and bezier curve:
-    auto a = ray.pos.x; auto c = ray.dir.x;
-    auto b = ray.pos.y; auto d = ray.dir.y;
-    // The ray can now be written parametrically as:
-    // x(s) = a+s*c
-    // y(s) = b+s*d
-    // For s >= 0.
-    auto e = qb.p0.x; auto g = qb.p1.x; auto j = qb.p2.x;
-    auto f = qb.p0.y; auto h = qb.p1.y; auto k = qb.p2.y;
-    // Note that the bezier curve can now be written parametrically as:
+    Prec a = ray.pos.x; Prec c = ray.dir.x;
+    Prec b = ray.pos.y; Prec d = ray.dir.y;
+    // The ray can now be written parametrically as
+    // x(s) = a+s
+    // y(s) = b
+    // for s >= 0.
+    Prec e = qb.p0.x; Prec g = qb.p1.x; Prec j = qb.p2.x;
+    Prec f = qb.p0.y; Prec h = qb.p1.y; Prec k = qb.p2.y;
+    // Note that the bezier curve can now be written parametrically as
     // x(t) = (e-2g+j)t^2+2(g-e)t+e
     // y(t) = (f-2h+k)t^2+2(h-f)t+f
-    // For 0 <= t < 1. Note that the last inequality must be sharp since an
+    // for 0 <= t < 1. Note that the last inequality must be sharp since an
     // intersection at an endpoint would also be an intersection at the
     // beginning of the next curve leading to two intersections in a single
     // point.
     // To find the intersection count we simply need to find the number of
     // solutions to the following equations:
-    // a+sc=(e-2g+j)t^2+2(g-e)t+e
-    // b+sd=(f-2h+k)t^2+2(h-f)t+f
+    // a+s=(e-2g+j)t^2+2(g-e)t+e
+    // b=(f-2h+k)t^2+2(h-f)t+f
+    // By setting
+    {auto A = (f-2*h+k);
+    auto B = 2*(h-f);
+    auto C = f-b;
+    auto D = B*B-4*A*C;
+    // we get the equation At^2+Bt+C=0 with no solutions if D < 0, possibly one
+    // if D = 0 and possibly two if D > 0.
+    if (D < 0) return 0;
+
+    if (D == 0)
+    {
+        // At most one solution.
+        if (A == 0)
+        {
+            // Since  A=D=0, B = 0 and therefore we have a solution only if
+            // C=0.
+            if (C) return 0;
+        }
+        // We have t = -B/2A. If A != 0 then  0 <= t < 1 gives:
+        // If  A > 0  then  0 <= B < -2A  <=>  0 <= t < 1
+        // If  A < 0  then  -2A < B <= 0  <=>  0 <= t < 1.
+        // In total, |B| < |2A| and A*B <= 0  <=>  0 <= t < 1.
+        if (std::abs(B) >= std::abs(2*A) || A*B > 0) return false;
+
+        // We have a solution in the bezier curve. Now we just need to check
+        // that it is indeed a solution in the ray.
+        // We get that  (e-2g+j)t^2+2(g-e)t+(e-a) >= 0. Setting
+        auto E = e-2*g+j;
+        //auto F = 2*(g-e);
+        auto G = e-a;
+        // the solution is simply (see derivation externally):
+        if (C*E-A*G <= sign(A)*B*(g-e)) return 1;
+        return 0;
+    }
+
+
+    }
+    return 0;
+
+
+
+
     // Of course, we must make sure that the parameters are in range, so a
     // solution (s, t) to the above is valid iff s >= 0 and 0 <= t < 1.
     // First we isolate s:
@@ -206,7 +302,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     //      *      '
     //    *         '
     // Bezier      Line, which contains ray
-    if (D < 0) return 0;
+    if (D < 0) RETURN(0);///return 0;
 
     // Depending on whether D = 0 or D > 0, the line and infinitely extended
     // bezier curve intersects somewhere in one or two points, respectively.
@@ -221,9 +317,8 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     bool sol = false;    // Is  -B/2A + sqrt(D)/2A  a valid t? [Plus solution]
     bool solSub = false; // Is  -B/2A - sqrt(D)/2A  a valid t? [Minus solution]
 
-    // We look at the case where A > 0. The case where A < 0 will be handled
-    // later. Please note that A != 0 since the bezier curve would otherwise be
-    // a line segment, a case which is caught in pre-processing.
+    // We look at the case where A > 0. The cases where A <= 0 will be handled
+    // later.
     if (A > 0)
     {
         // If D=0 we only have one solution and therefore we get t=-B/2A. This
@@ -359,9 +454,6 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
         }
     }
 
-    // Now we know all solutions where the line intersects the curve. If there
-    // are none, the curve and ray will not intersect.
-    if (sol + solSub == 0) return 0;
     // If there are some solutions we still don't know whether they are on the
     // ray. Remember that s = c^{-1}((e-2g+j)t^2+2(g-e)t+e-a). To see if our
     // solutions lie on the ray, we need to check that s >= 0, that is:
@@ -383,9 +475,38 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     // therefore  E > 0  gives that for some t,  p(t) > 0  . Since  H < 0
     // p(t) != 0  for all  t  and as  p(t)  is continuous, it must be positive
     // everywhere. Therefore our solutions will be correct.
-    if (E > 0 && H <= 0) return sol+solSub;
+    if (A == 0)
+    {
+        // Equation is now  Bt+C = 0  <=>  t = -C/B  . We have:
+        // 0 <= t < 1     <=>
+        // 0 <= -C/B < 1
+        // In case  B >= 0  , this reduces to  0 <= -C < B  and otherwise
+        // 0 >= -C > B:
+        if ((B >= 0 && C <= 0 && -C < B) || (B < 0 && C >= 0 && -C > B))
+        {
+            // It is a solution. Now we plug it into the next polynomial.
+            if (E > 0 && H <= 0) RETURN(1);///return 1;
+            if (E < 0 && H < 0) RETURN(0);///return 0;
+            // We need to check whether p(-C/B) >= 0. We get:
+            // E*(-C/B)^2-F*C/B+G   >= 0  <=>
+            // E*(-C)^2-B*C*F+B^2*G >= 0  <=>
+            // C^2*E-B*C*F+B^2*G    >= 0  <=>
+            // C*(C*E-B*F)+B^2*G    >= 0
+            if (C*(C*E-B*F)+B*B*G >= 0) RETURN(1);///return 1;
+            RETURN(0);///return 0;
+        }
+        else
+        {
+            RETURN(0);///return 0;
+        }
+    }
+    if (E > 0 && H <= 0) RETURN(sol+solSub);///return sol+solSub;
     // Likewise, if  E < 0  and  H < 0  ,  p(t) < 0  no matter the value of t.
-    if (E < 0 && H < 0) return 0;
+    if (E < 0 && H < 0) RETURN(0);///return 0;
+
+    // Now we know all solutions where the line intersects the curve. If there
+    // are none, the curve and ray will not intersect.
+    if (sol + solSub == 0) RETURN(0);///return 0;
 
     // We start by dealing with specific degenerate cases (the easy ones).
     if (E == 0)
@@ -393,8 +514,8 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
         if (F == 0)
         {
             // p(t) >= 0  degenerates to  G >= 0
-            if (G >= 0) return sol+solSub;
-            return 0;
+            if (G >= 0) RETURN(sol+solSub);///return sol+solSub;
+            RETURN(0);///return 0;
         }
         // p(t) >= 0  degenerates to  Ft+G >= 0 iff Ft >= -G.
         if (D == 0)
@@ -404,8 +525,8 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
             // F*B/2A    <= G       <=>
             // 2A*F*B    <= 4A^2*G  <=>
             // A*F*B     <= 2A^2*G
-            if (A*F*B <= 2*A*A*G) return sol;
-            return 0;
+            if (A*F*B <= 2*A*A*G) RETURN(sol);///return sol;
+            RETURN(0);///return 0;
         }
     }
     // Let # be shorthand for +- (and -# is then -+). The solutions can now be
@@ -420,6 +541,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     // (#sqrt(D))*(AF-BE) >= A(BF+2(CE-AG))-B^2*E   =: S
     auto S = A*(B*F+2*(C*E-A*G))-B*B*E;
     auto L = A*F-B*E;
+
     // (#sqrt(D))*L >= S
     // Now we start looking at +sqrt(D):
     // if L >= 0 then:
@@ -438,7 +560,7 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     if (L > 0 && !(S <= 0 && D*L*L <= S*S)) solSub = false;
     if (L <= 0 && !(S <= 0 || (S > 0 && D*L*L >= S*S))) solSub = false;
 
-    return sol+solSub;
+    RETURN(sol+solSub);///return sol+solSub;
 }
 
 // Currently only handles line segments.
@@ -457,10 +579,28 @@ bool Glyph::isInside(ivec2 pos, ivec2 dir) const
         cLine.pos = position(contourBegin + contourLength - 1);
         for (size_t j = contourBegin; j < contourEnd(i); ++j)
         {
-            cLine.dir = position(j) - cLine.pos;
-            bool rayBeginOnSegment = false;
-            intersectCount += intersects(testRay, cLine, rayBeginOnSegment);
-            if (rayBeginOnSegment) return true;
+            if (isControl(j))
+            {
+                QuadraticBezier qb;
+                qb.p0 = cLine.pos;
+                qb.p1 = position(j);
+                qb.p2 = position((j-contourBegin+1)%contourLength+contourBegin);
+                auto ic = intersectionCount(testRay, qb);
+                ///std::cout << "Bezier curve gives " << ic << " intersections.\n";
+                intersectCount += ic;
+
+            }
+            else
+            {
+                cLine.dir = position(j) - cLine.pos;
+
+                bool rayBeginOnSegment = false;
+                intersectCount += intersects(testRay,
+                                             cLine,
+                                             rayBeginOnSegment,
+                                             isZeroAcceptable(j));
+                if (rayBeginOnSegment) return true;
+            }
             cLine.pos = position(j);
         }
     }
@@ -486,19 +626,21 @@ FontInfo::FontInfo(FT_Face face)
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
     int pixelWidth, pixelHeight;
+    int maxFontWidth = info.bboxMax.x - info.bboxMin.x;
+    int maxFontHeight = info.bboxMax.y - info.bboxMin.y;
     if (width <= 0)
     {
         if (height <= 0)
         {
             throw std::runtime_error("Bad render size.");
         }
-        pixelHeight = (height * glyph.info().height) / info.emSize;
+        pixelHeight = (height * maxFontHeight) / info.emSize;
         if (pixelHeight < 2) pixelHeight = 2;
         pixelWidth = pixelHeight * glyph.info().width / glyph.info().height;
     }
     else
     {
-        pixelWidth = (width * glyph.info().width) / info.emSize;
+        pixelWidth = (width * maxFontWidth) / info.emSize;
         if (pixelWidth < 2) pixelWidth = 2;
         pixelHeight = pixelWidth * glyph.info().height / glyph.info().width;
     }
@@ -512,13 +654,21 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             ivec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
+            img.setPixel(x, y, 0x000000);
             if (glyph.isInside(glyphPos, ivec2{1, 0}))
             {
-                img.setPixel(x, y, 0xffffff);
+                img.setPixel(x, y, 0xff00ff);
             }
-            else
+            if (glyph.isInside(glyphPos, ivec2{0, 1}))
             {
-                img.setPixel(x, y, 0x000000);
+                Colour c = img.pixel(x, y);
+                if (c.g > 0) c.g = 0;
+                else c.g = 255;
+                img.setPixel(x, y, c);
+            }
+            if (img.pixel(x, y).r != img.pixel(x, y).g)
+            {
+                std::cerr << "\033[1;31mBAD PIXEL " << x << ", " << y << "\033[0m\n";
             }
         }
     }

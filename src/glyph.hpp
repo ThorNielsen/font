@@ -46,12 +46,17 @@ public:
     ivec2 position(size_t i) const { return m_position[i]; }
     bool isControl(size_t i) const { return m_isControlPoint[i]; }
     bool isThirdOrder(size_t i) const { return m_isThirdOrder[i]; }
+    bool isZeroAcceptable(size_t i) const { return m_zeroAcceptable[i]; }
 
 private:
+    bool isInitialPositive(size_t cBegin, size_t contourID);
+    void computeUsableZeroes();
+
     std::vector<size_t> m_contourEnd;
     std::vector<ivec2> m_position;
     std::vector<bool> m_isControlPoint;
     std::vector<bool> m_isThirdOrder;
+    std::vector<bool> m_zeroAcceptable;
     GlyphInfo m_info;
 };
 
