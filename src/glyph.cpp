@@ -246,8 +246,7 @@ size_t intersects(ivec2 p,
 {
     auto subfac1 = p.y - l.pos.y;
     auto subfac2 = std::abs(2*subfac1-l.dir.y);
-    auto subfac3 = std::abs(l.dir.y);
-    if (subfac2 <= subfac3)
+    if (subfac2 <= l.dir.y)
     {
         auto subfac4 = p.x - l.pos.x;
         if (l.dir.y * subfac4 == l.dir.x * subfac1 &&
@@ -258,14 +257,10 @@ size_t intersects(ivec2 p,
         }
     }
 
-    if (l.pos.y == p.y)
-    {
-        return 0;
-    }
 
-    if (dot(perp(l.dir), p-l.pos)*sign(l.dir.y) >= 0)
+    if (dot(perp(l.dir), p-l.pos) > 0)
     {
-        return subfac2 < subfac3;
+        return subfac2 < l.dir.y;
     }
     return 0;
 }
@@ -645,10 +640,10 @@ size_t Glyph::isInside(ivec2 pos) const
     size_t intersections = 0;
     for (auto& cp : m_critPoints)
     {
-
         if (cp.y < pos.y) continue;
         if (cp.y > pos.y) break;
         intersections += pos.x <= cp.x;
+        if (pos.x == cp.x) return 251;
     }
 
     for (size_t i = 0; i < m_horSegments.size(); ++i)
@@ -664,17 +659,16 @@ size_t Glyph::isInside(ivec2 pos) const
 
     for (size_t i = 0; i < m_segments.size(); ++i)
     {
-        if (std::max(m_segments[i].pos.y,
-                     m_segments[i].pos.y+m_segments[i].dir.y) < pos.y)
+        if (m_segments[i].pos.y+m_segments[i].dir.y < pos.y)
         {
             continue;
         }
-        if (std::min(m_segments[i].pos.y,
-                     m_segments[i].pos.y+m_segments[i].dir.y) > pos.y)
+        if (m_segments[i].pos.y > pos.y)
         {
             return intersections;
         }
         bool rayOnSegment = false;
+
         intersections += intersects(pos,
                                     m_segments[i],
                                     rayOnSegment);
