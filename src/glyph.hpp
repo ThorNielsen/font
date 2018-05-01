@@ -50,21 +50,19 @@ private:
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control,
                          std::vector<bool>& zeroAcceptable);
-    bool isInitialPositive(const std::vector<size_t>& contourEnd,
-                           const std::vector<ivec2>& position,
-                           const std::vector<bool>& control,
-                           size_t cBegin, size_t contourID);
+    void computeCriticalPoints(const std::vector<size_t>& contourEnd,
+                               const std::vector<ivec2>& pos,
+                               std::vector<bool>& critical,
+                               size_t beg, size_t outlineID);
     void computeUsableZeroes(const std::vector<size_t>& contourEnd,
                              const std::vector<ivec2>& position,
-                             const std::vector<bool>& control,
                              std::vector<bool>& zeroAcceptable);
 
     std::vector<LineSegment> m_segments;
     std::vector<HorizontalSegment> m_horSegments;
+    std::vector<ivec2> m_critPoints;
     std::vector<QuadraticBezier> m_bezier;
 
-    std::vector<bool> m_sZeroAccept;
-    std::vector<bool> m_bZeroAccept;
     GlyphInfo m_info;
 };
 

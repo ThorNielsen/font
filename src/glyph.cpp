@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 
 Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
@@ -48,42 +49,47 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<bool>& control,
                             std::vector<bool>& zeroAcceptable)
 {
-    computeUsableZeroes(contourEnd, position, control, zeroAcceptable);
+    computeUsableZeroes(contourEnd, position, zeroAcceptable);
 
-    struct SegmentHolder
-    {
-        ivec2 p0;
-        ivec2 p1;
-        bool acceptZero;
-    };
+    std::multimap<int, ivec2> horLines;
 
-    std::vector<SegmentHolder> segments;
     size_t contourBegin = 0;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
-        auto prevPos = position[contourEnd[contour]-1];
-        for (size_t i = contourBegin; i < contourEnd[contour]; ++i)
+        auto prevIdx = contourEnd[contour]-1;
+        auto prevPos = position[prevIdx];
+        for (size_t i = contourBegin; i < contourEnd[contour]; prevIdx = i++)
         {
             auto cPos = position[i];
+            if (zeroAcceptable[i])
+            {
+                m_critPoints.emplace_back(ivec2{cPos.x, cPos.y});
+            }
             if (control[i])
             {
                 auto nextIdx = i+1-contourBegin;
                 nextIdx %= (contourEnd[contour]-contourBegin);
                 nextIdx += contourBegin;
                 m_bezier.push_back({prevPos, cPos, position[nextIdx]});
-                m_bZeroAccept.push_back(zeroAcceptable[i]);
             }
             else
             {
                 if (prevPos.y == cPos.y)
                 {
-                    m_horSegments.push_back({cPos.y,
-                                             std::min(prevPos.x, cPos.x),
-                                             std::max(prevPos.x, cPos.x)});
+                    horLines.emplace(cPos.y,
+                                     ivec2{std::min(prevPos.x, cPos.x),
+                                           std::max(prevPos.x, cPos.x)});
                 }
                 else
                 {
-                    segments.push_back({prevPos, cPos, zeroAcceptable[i]});
+                    if (cPos.y > prevPos.y)
+                    {
+                        m_segments.push_back({prevPos, cPos});
+                    }
+                    else
+                    {
+                        m_segments.push_back({cPos, prevPos});
+                    }
                 }
             }
             prevPos = cPos;
@@ -91,81 +97,127 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         contourBegin = contourEnd[contour];
     }
 
-    std::sort(m_horSegments.begin(), m_horSegments.end(),
-              [](const HorizontalSegment& a, const HorizontalSegment& b)
+    for (auto line = horLines.begin(), elem = line;
+         line != horLines.end();
+         ++line)
+    {
+        std::vector<ivec2> hseg;
+        for (; elem != horLines.end() && elem->first == line->first; ++elem)
+        {
+            hseg.push_back(elem->second);
+        }
+        std::sort(hseg.begin(), hseg.end(),
+                  [](const ivec2& a, const ivec2& b)
+                  {
+                      if (a.x == b.x) return a.y < b.y;
+                      return a.x < b.x;
+                  });
+        int prevEnd = std::numeric_limits<int>::min();
+        for (auto& seg : hseg)
+        {
+            if (seg.x <= prevEnd)
+            {
+                m_horSegments.back().xmax = seg.y;
+            }
+            else
+            {
+                m_horSegments.push_back({line->first, seg.x, seg.y});
+            }
+            prevEnd = seg.y;
+        }
+    }
+
+    std::sort(m_critPoints.begin(), m_critPoints.end(),
+              [](const ivec2& a, const ivec2 b)
               {
-                  if (a.y == b.y) return a.xmin < b.xmin;
                   return a.y < b.y;
               });
 
-    std::sort(segments.begin(), segments.end(),
-              [](const SegmentHolder& a, const SegmentHolder& b)
+    std::sort(m_segments.begin(), m_segments.end(),
+              [](const LineSegment& a, const LineSegment& b)
               {
-                  auto aminy = std::min(a.p0.y, a.p1.y);
-                  auto bminy = std::min(b.p0.y, b.p1.y);
-                  if (aminy != bminy)
-                  {
-                      return aminy < bminy;
-                  }
-                  return std::min(a.p0.x, a.p1.x) < std::min(b.p0.x, b.p1.x);
+                  if (a.pos.y == b.pos.y) return a.pos.x < b.pos.x;
+                  return a.pos.y < b.pos.y;
               });
-    m_segments.resize(segments.size());
-    m_sZeroAccept.resize(segments.size());
-    for (size_t i = 0; i < segments.size(); ++i)
-    {
-        m_segments[i] = LineSegment{segments[i].p0, segments[i].p1};
-        m_sZeroAccept[i] = segments[i].acceptZero;
-    }
 
 }
 
-bool Glyph::isInitialPositive(const std::vector<size_t>& contourEnd,
-                              const std::vector<ivec2>& position,
-                              const std::vector<bool>& control,
-                              size_t cBegin, size_t contourID)
+inline size_t increment(size_t val, size_t outlineBegin, size_t outlineLength)
 {
-    auto prevY = position[contourEnd[contourID] - 1].y;
-    for (size_t j = contourEnd[contourID]-1; j > cBegin; --j)
-    {
-        if (control[j])
-        {
-            throw std::logic_error("Bézier positivity extraction not implemented.");
-        }
-        auto currY = position[j].y;
-
-        // Note that we iterate backwards, so index(prevY) > index(currY).
-        if (auto yDiff = prevY - currY)
-        {
-            return yDiff > 0;
-        }
-        prevY = currY;
-    }
-    throw std::runtime_error("Bad contour");
+    return (val+1-outlineBegin)%outlineLength+outlineBegin;
 }
+
+inline size_t decrement(size_t val, size_t outlineBegin, size_t outlineLength)
+{
+    return ((val+outlineLength)-1-outlineBegin)%outlineLength+outlineBegin;
+}
+
+int leftSign(size_t i, size_t beg, size_t len, const std::vector<ivec2>& pos)
+{
+    return (pos[decrement(i, beg, len)].y - pos[i].y);
+    return -(pos[i].y - pos[decrement(i, beg, len)].y);
+}
+
+int rightSign(size_t i, size_t beg, size_t len, const std::vector<ivec2>& pos)
+{
+    return (pos[increment(i, beg, len)].y - pos[i].y);
+}
+
+void Glyph::computeCriticalPoints(const std::vector<size_t>& contourEnd,
+                                  const std::vector<ivec2>& pos,
+                                  std::vector<bool>& critical,
+                                  size_t beg, size_t outlineID)
+{
+    size_t len = contourEnd[outlineID]-beg;
+    size_t j = increment(beg, beg, len);
+    while (!leftSign(j, beg, len, pos) && j != beg)
+    {
+        j = increment(j, beg, len);
+    }
+    if (j == beg)
+    {
+        throw std::runtime_error("Degenerate outline.");
+    }
+
+    size_t iter = len;
+    while (iter)
+    {
+        size_t k = j;
+        while (!rightSign(k, beg, len, pos))
+        {
+            k = increment(k, beg, len);
+            --iter;
+        }
+        auto left = leftSign(j, beg, len, pos);
+        auto right = rightSign(k, beg, len, pos);
+        if (left*right < 0)
+        {
+            if (left > 0)
+            {
+                if (critical[j]) break;
+                critical[j] = true;
+            }
+            if (right > 0)
+            {
+                if (critical[k]) break;
+                critical[k] = true;
+            }
+        }
+        j = increment(k, beg, len);
+        --iter;
+    }
+}
+
 
 void Glyph::computeUsableZeroes(const std::vector<size_t>& contourEnd,
                                 const std::vector<ivec2>& position,
-                                const std::vector<bool>& control,
                                 std::vector<bool>& zeroAcceptable)
 {
+    zeroAcceptable.resize(position.size(), false);
     size_t cBegin = 0;
     for (size_t i = 0; i < contourEnd.size(); ++i)
     {
-        auto cLength = contourEnd[i] - cBegin;
-        LineSegment cLine;
-        cLine.pos = position[cBegin + cLength - 1];
-        auto prevPositive = isInitialPositive(contourEnd, position, control, cBegin, i);
-        for (size_t j = cBegin; j < contourEnd[i]; ++j)
-        {
-            cLine.dir = position[j] - cLine.pos;
-            if (!cLine.dir.y) zeroAcceptable[j] = false;
-            else
-            {
-                zeroAcceptable[j] = (cLine.dir.y > 0) == prevPositive;
-                prevPositive = cLine.dir.y > 0;
-            }
-            cLine.pos = position[j];
-        }
+        computeCriticalPoints(contourEnd, position, zeroAcceptable, cBegin, i);
         cBegin = contourEnd[i];
     }
 }
@@ -183,16 +235,14 @@ void Glyph::dumpInfo() const
     for (size_t i = 0; i < m_segments.size(); ++i)
     {
         std::cout << "Segment #" << i << ": ";
-        std::cout << m_segments[i].pos << "+t*" << m_segments[i].dir
-                  << " [ZeroOK: " << m_sZeroAccept[i] << "]\n";
+        std::cout << m_segments[i].pos << "+t*" << m_segments[i].dir << "\n";
     }
     std::cout << "\n";
 }
 
 size_t intersects(ivec2 p,
                   LineSegment l,
-                  bool& rayBeginOnSegment,
-                  bool zeroHitAcceptable) noexcept
+                  bool& rayBeginOnSegment) noexcept
 {
     auto subfac1 = p.y - l.pos.y;
     auto subfac2 = std::abs(2*subfac1-l.dir.y);
@@ -208,9 +258,9 @@ size_t intersects(ivec2 p,
         }
     }
 
-    if (l.pos.y == p.y && l.pos.x >= p.x)
+    if (l.pos.y == p.y)
     {
-        return zeroHitAcceptable;
+        return 0;
     }
 
     if (dot(perp(l.dir), p-l.pos)*sign(l.dir.y) >= 0)
@@ -593,6 +643,14 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
 size_t Glyph::isInside(ivec2 pos) const
 {
     size_t intersections = 0;
+    for (auto& cp : m_critPoints)
+    {
+
+        if (cp.y < pos.y) continue;
+        if (cp.y > pos.y) break;
+        intersections += pos.x <= cp.x;
+    }
+
     for (size_t i = 0; i < m_horSegments.size(); ++i)
     {
         if (m_horSegments[i].y < pos.y) continue;
@@ -600,7 +658,7 @@ size_t Glyph::isInside(ivec2 pos) const
         if (m_horSegments[i].xmin <= pos.x &&
             pos.x <= m_horSegments[i].xmax)
         {
-            return 255;
+            return 253;
         }
     }
 
@@ -619,8 +677,7 @@ size_t Glyph::isInside(ivec2 pos) const
         bool rayOnSegment = false;
         intersections += intersects(pos,
                                     m_segments[i],
-                                    rayOnSegment,
-                                    m_sZeroAccept[i]);
+                                    rayOnSegment);
         if (rayOnSegment) return 255;
     }
     return intersections;
