@@ -124,19 +124,12 @@ bool intersects(ivec2 p,
     {
         // No intersections.
         if (l.pos.y != p.y) return 0;
-        if (l.dir.x > 0)
+        // Line begin on segment <=> p.x in {l.pos.x+t*l.dir.x | 0<=t<=1}
+        // <=> |p.x-l.pos.x-l.dir.x/2| <= |l.dir.x/2|
+        // <=> |2(p.x-l.pos.x)-l.dir.x| <= |l.dir.x|
+        if (std::abs(2*(p.x-l.pos.x)-l.dir.x) <= std::abs(l.dir.x))
         {
-            if (l.pos.x <= p.x && p.x <= l.pos.x + l.dir.x)
-            {
-                rayBeginOnSegment = true;
-            }
-        }
-        if (l.dir.x > 0)
-        {
-            if (l.pos.x >= p.x && p.x >= l.pos.x + l.dir.x)
-            {
-                rayBeginOnSegment = true;
-            }
+            rayBeginOnSegment = true;
         }
         return 0;
     }
@@ -152,6 +145,7 @@ bool intersects(ivec2 p,
     return 0;
 }
 
+/*
 #define RETURN(x) return (x)
 
 
@@ -519,17 +513,14 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
     RETURN(sol+solSub);///return sol+solSub;
 }
 
-// Currently only handles line segments.
-int Glyph::isInside(ivec2 pos, ivec2 dir) const
+*/
+
+bool Glyph::isInside(ivec2 pos) const
 {
     size_t intersectCount = 0;
-    Ray testRay;
-    testRay.dir = dir; //{1, 0};
-    testRay.pos = pos;
     size_t cBegin = 0;
     for (size_t i = 0; i < contours(); ++i)
     {
-        size_t contourICount = 0;
         size_t contourLength = contourEnd(i) - cBegin;
         if (contourLength < 3) continue; // Degenerate contour.
         LineSegment cLine;
@@ -538,15 +529,15 @@ int Glyph::isInside(ivec2 pos, ivec2 dir) const
         {
             if (isControl(j))
             {
-                throw new int;
-                QuadraticBezier qb;
+                throw std::logic_error("Bézier curve implementation disabled.");
+                /*QuadraticBezier qb;
                 qb.p0 = cLine.pos;
                 qb.p1 = position(j);
                 qb.p2 = position((j-cBegin+1)%contourLength+cBegin);
-                auto ic = intersectionCount(testRay, qb);
+                auto ic = intersectionCount(pos, qb);
                 ///std::cout << "Bezier curve gives " << ic << " intersections.\n";
-                contourICount += ic;
-
+                intersectCount += ic;
+                */
             }
             else
             {
@@ -554,26 +545,24 @@ int Glyph::isInside(ivec2 pos, ivec2 dir) const
 
 
                 bool rayBeginOnSegment = false;
-                bool ict        = intersects(testRay.pos,
+                bool ict        = intersects(pos,
                                              cLine,
                                              rayBeginOnSegment,
                                              isZeroAcceptable(j));
-                contourICount += ict;
                 if (rayBeginOnSegment)
                 {
-                    intersectCount = 1;
-                    break;
+                    // The set of points which the glyph consists of contains
+                    // all curves. Therefore if the current point is on a
+                    // segment, it is on the glyph.
+                    return true;
                 }
+                intersectCount += ict;
             }
             cLine.pos = position(j);
         }
-        if (contourICount&1)
-        {
-            ++intersectCount;
-        }
         cBegin = contourEnd(i);
     }
-    return intersectCount;
+    return intersectCount&1;
 }
 
 FontInfo::FontInfo(FT_Face face)
@@ -624,24 +613,17 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/pixelWidth;
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/pixelHeight;
             img.setPixel(x, y, 0x3d3d5c);
-            if (auto cnt = glyph.isInside(glyphPos, ivec2{0, 1}))
+            if (auto cnt = glyph.isInside(glyphPos))
             {
-                std::cerr << std::hex << cnt;
-                /*Colour c;
-                c.r = cnt*16;
-                c.b = (cnt&1)*127;
-                img.setPixel(x, y, c);
-                */
-                if (cnt&1) img.setPixel(x, y, 0xffffff);
+                std::cout << std::hex << cnt;
+                if (cnt) img.setPixel(x, y, 0xffffff);
             }
             else
             {
-                std::cerr << "0";
+                std::cout << "0";
             }
-            ///break;
         }
-        ///break;
-        std::cerr << "\n";
+        std::cout << "\n";
     }
     return img;
 }
