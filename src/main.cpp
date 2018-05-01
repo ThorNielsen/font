@@ -8,20 +8,9 @@
 #include <vector>
 #include "primitives.hpp"
 int intersectionCount(Ray ray, QuadraticBezier qb);
-bool intersects(ivec2 p,
-                LineSegment l,
-                bool& rayBeginOnSegment,
-                bool zeroHitAcceptable);
+
 int main()
 {
-    LineSegment ls;
-    ls.pos = {10, 0};
-    ls.dir = {10, 10};
-    bool dummy;
-    std::cout << intersects({15, 5}, ls, dummy, true) << std::endl;
-    std::cout << intersects({16, 5}, ls, dummy, true) << std::endl;
-
-    //return 0;
     FT_Library ftLib;
     checkFTError(FT_Init_FreeType(&ftLib));
 
@@ -42,7 +31,7 @@ int main()
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
     FT_GlyphSlot slot = face->glyph;
-
+/*
     FT_Bitmap bitmap = slot->bitmap;
     Image img(bitmap.width, bitmap.rows, "Character");
 
@@ -58,13 +47,13 @@ int main()
         }
     }
     writeImage(img);
-
+*/
     Glyph glyph(slot->outline, slot->metrics);
     FontInfo info(face);
 
-    glyph.dumpInfo();
+    //glyph.dumpInfo();
 
-    img = render(info, glyph, 0, 64);
+    Image img = render(info, glyph, 0, 2048);
     img.name = "Custom";
     writeImage(img);
 

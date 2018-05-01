@@ -3,6 +3,7 @@
 
 #include "freetype.hpp"
 #include "image.hpp"
+#include "primitives.hpp"
 #include "vector2.hpp"
 
 #include <vector>
@@ -37,26 +38,26 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
 
-    bool isInside(ivec2 pos) const;
-
-    size_t contours() const { return m_contourEnd.size(); }
-    size_t positions() const { return m_position.size(); }
-
-    size_t contourEnd(size_t c) const { return m_contourEnd[c]; }
-    ivec2 position(size_t i) const { return m_position[i]; }
-    bool isControl(size_t i) const { return m_isControlPoint[i]; }
-    bool isThirdOrder(size_t i) const { return m_isThirdOrder[i]; }
-    bool isZeroAcceptable(size_t i) const { return m_zeroAcceptable[i]; }
-
+    size_t isInside(ivec2 pos) const;
 private:
-    bool isInitialPositive(size_t cBegin, size_t contourID);
-    void computeUsableZeroes();
+    void extractOutlines(const std::vector<size_t>& contourEnd,
+                         const std::vector<ivec2>& position,
+                         const std::vector<bool>& control,
+                         std::vector<bool>& zeroAcceptable);
+    bool isInitialPositive(const std::vector<size_t>& contourEnd,
+                           const std::vector<ivec2>& position,
+                           const std::vector<bool>& control,
+                           size_t cBegin, size_t contourID);
+    void computeUsableZeroes(const std::vector<size_t>& contourEnd,
+                             const std::vector<ivec2>& position,
+                             const std::vector<bool>& control,
+                             std::vector<bool>& zeroAcceptable);
 
-    std::vector<size_t> m_contourEnd;
-    std::vector<ivec2> m_position;
-    std::vector<bool> m_isControlPoint;
-    std::vector<bool> m_isThirdOrder;
-    std::vector<bool> m_zeroAcceptable;
+    std::vector<LineSegment> m_segments;
+    std::vector<QuadraticBezier> m_bezier;
+
+    std::vector<bool> m_sZeroAccept;
+    std::vector<bool> m_bZeroAccept;
     GlyphInfo m_info;
 };
 

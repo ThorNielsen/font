@@ -7,26 +7,29 @@
 #include <stdexcept>
 
 Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
-    : m_contourEnd(outline.n_contours),
-      m_position(outline.n_points),
-      m_isControlPoint(outline.n_points),
-      m_isThirdOrder(outline.n_points),
-      m_zeroAcceptable(outline.n_points)
 {
-    // Todo:
-    //     Replace degenerate bezier curves with segments.
-    //     Remove degenerate outlines (if any).
+    std::vector<size_t> contourEnd(outline.n_contours);
+    std::vector<ivec2> position(outline.n_points);
+    std::vector<bool> isControl(outline.n_points);
+    std::vector<bool> zeroAcceptable(outline.n_points);
+
     for (short i = 0; i < outline.n_points; ++i)
     {
-        m_position[i] = ivec2{static_cast<S32>(outline.points[i].x),
-                              static_cast<S32>(outline.points[i].y)};
-        m_isControlPoint[i] = !bit<0>(outline.tags[i]);
-        m_isThirdOrder[i] = bit<1>(outline.tags[i]);
+        position[i] = ivec2{static_cast<S32>(outline.points[i].x),
+                            static_cast<S32>(outline.points[i].y)};
+        isControl[i] = !bit<0>(outline.tags[i]);
+        bool thirdOrder = bit<1>(outline.tags[i]);
+        if (thirdOrder)
+        {
+            throw std::runtime_error("Third order Bézier curves unsupported.");
+        }
     }
     for (short i = 0; i < outline.n_contours; ++i)
     {
-        m_contourEnd[i] = outline.contours[i]+1;
+        contourEnd[i] = outline.contours[i]+1;
     }
+
+    extractOutlines(contourEnd, position, isControl, zeroAcceptable);
 
     m_info.width = static_cast<int>(metrics.width);
     m_info.height = static_cast<int>(metrics.height);
@@ -36,15 +39,56 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.vCursorX = static_cast<int>(metrics.vertBearingX);
     m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
-    computeUsableZeroes();
 }
 
-bool Glyph::isInitialPositive(size_t cBegin, size_t contourID)
+
+void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
+                            const std::vector<ivec2>& position,
+                            const std::vector<bool>& control,
+                            std::vector<bool>& zeroAcceptable)
 {
-    auto prevY = position(contourEnd(contourID) - 1).y;
-    for (size_t j = contourEnd(contourID)-1; j > cBegin; --j)
+    computeUsableZeroes(contourEnd, position, control, zeroAcceptable);
+
+    size_t contourBegin = 0;
+    for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
-        auto currY = position(j).y;
+        auto prevPos = position[contourEnd[contour]-1];
+        for (size_t i = contourBegin; i < contourEnd[contour]; ++i)
+        {
+            auto cPos = position[i];
+            if (control[i])
+            {
+                auto nextIdx = i+1-contourBegin;
+                nextIdx %= (contourEnd[contour]-contourBegin);
+                nextIdx += contourBegin;
+                m_bezier.push_back({prevPos, cPos, position[nextIdx]});
+                m_bZeroAccept.push_back(zeroAcceptable[i]);
+            }
+            else
+            {
+                m_segments.push_back({prevPos, cPos});
+                m_sZeroAccept.push_back(zeroAcceptable[i]);
+            }
+            prevPos = cPos;
+        }
+        contourBegin = contourEnd[contour];
+    }
+
+}
+
+bool Glyph::isInitialPositive(const std::vector<size_t>& contourEnd,
+                              const std::vector<ivec2>& position,
+                              const std::vector<bool>& control,
+                              size_t cBegin, size_t contourID)
+{
+    auto prevY = position[contourEnd[contourID] - 1].y;
+    for (size_t j = contourEnd[contourID]-1; j > cBegin; --j)
+    {
+        if (control[j])
+        {
+            throw std::logic_error("Bézier positivity extraction not implemented.");
+        }
+        auto currY = position[j].y;
 
         // Note that we iterate backwards, so index(prevY) > index(currY).
         if (auto yDiff = prevY - currY)
@@ -56,27 +100,30 @@ bool Glyph::isInitialPositive(size_t cBegin, size_t contourID)
     throw std::runtime_error("Bad contour");
 }
 
-void Glyph::computeUsableZeroes()
+void Glyph::computeUsableZeroes(const std::vector<size_t>& contourEnd,
+                                const std::vector<ivec2>& position,
+                                const std::vector<bool>& control,
+                                std::vector<bool>& zeroAcceptable)
 {
     size_t cBegin = 0;
-    for (size_t i = 0; i < contours(); ++i)
+    for (size_t i = 0; i < contourEnd.size(); ++i)
     {
-        auto cLength = contourEnd(i) - cBegin;
+        auto cLength = contourEnd[i] - cBegin;
         LineSegment cLine;
-        cLine.pos = position(cBegin + cLength - 1);
-        auto prevPositive = isInitialPositive(cBegin, i);
-        for (size_t j = cBegin; j < contourEnd(i); ++j)
+        cLine.pos = position[cBegin + cLength - 1];
+        auto prevPositive = isInitialPositive(contourEnd, position, control, cBegin, i);
+        for (size_t j = cBegin; j < contourEnd[i]; ++j)
         {
-            cLine.dir = position(j) - cLine.pos;
-            if (!cLine.dir.y) m_zeroAcceptable[j] = false;
+            cLine.dir = position[j] - cLine.pos;
+            if (!cLine.dir.y) zeroAcceptable[j] = false;
             else
             {
-                m_zeroAcceptable[j] = (cLine.dir.y > 0) == prevPositive;
+                zeroAcceptable[j] = (cLine.dir.y > 0) == prevPositive;
                 prevPositive = cLine.dir.y > 0;
             }
-            cLine.pos = position(j);
+            cLine.pos = position[j];
         }
-        cBegin = contourEnd(i);
+        cBegin = contourEnd[i];
     }
 }
 
@@ -90,26 +137,11 @@ void Glyph::dumpInfo() const
     std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
               << m_info.vCursorY << ")\n";
     std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
-    std::cout << "Contour count: " << m_contourEnd.size() << "\n";
-    std::cout << "Point count: " << m_position.size() << "\n";
-    size_t p = 0;
-    for (size_t i = 0; i < m_contourEnd.size(); ++i)
+    for (size_t i = 0; i < m_segments.size(); ++i)
     {
-        std::cout << "Contour #" << i << ":\n";
-        for (size_t j = p; j < m_contourEnd[i]; ++j)
-        {
-            std::cout << "Point[" << j << "]: "
-                      << m_position[j] << " "
-                      << "[Control: " << m_isControlPoint[j];
-            if (m_isControlPoint[j])
-            {
-                std::cout << ", ThirdOrder: " << m_isThirdOrder[j];
-            }
-            std::cout << ", ZeroOK: " << m_zeroAcceptable[j];
-            std::cout << "]\n";
-        }
-        std::cout << "\n";
-        p = m_contourEnd[i];
+        std::cout << "Segment #" << i << ": ";
+        std::cout << m_segments[i].pos << "+t*" << m_segments[i].dir
+                  << " [ZeroOK: " << m_sZeroAccept[i] << "]\n";
     }
     std::cout << "\n";
 }
@@ -117,25 +149,31 @@ void Glyph::dumpInfo() const
 bool intersects(ivec2 p,
                 LineSegment l,
                 bool& rayBeginOnSegment,
-                bool zeroHitAcceptable)
+                bool zeroHitAcceptable) noexcept
 {
+    if (std::abs(2*(p.x-l.pos.x)-l.dir.x) <= std::abs(l.dir.x) &&
+        std::abs(2*(p.y-l.pos.y)-l.dir.y) <= std::abs(l.dir.y))
+    {
+        rayBeginOnSegment = true;
+        return 0;
+    }
     // Ray and segment are parallel:
     if (!l.dir.y)
     {
+        return 0;
         // No intersections.
         if (l.pos.y != p.y) return 0;
-        // Line begin on segment <=> p.x in {l.pos.x+t*l.dir.x | 0<=t<=1}
-        // <=> |p.x-l.pos.x-l.dir.x/2| <= |l.dir.x/2|
-        // <=> |2(p.x-l.pos.x)-l.dir.x| <= |l.dir.x|
         if (std::abs(2*(p.x-l.pos.x)-l.dir.x) <= std::abs(l.dir.x))
         {
             rayBeginOnSegment = true;
         }
         return 0;
     }
+    // lp+t*ld = p
+    // p-lp = t*ld
     if (l.pos.x - p.x >= 0 && l.pos.y == p.y)
     {
-        return zeroHitAcceptable;
+        return 100*zeroHitAcceptable;
     }
 
     if (dot(perp(l.dir), p-l.pos)*sign(l.dir.y) >= 0)
@@ -515,54 +553,20 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
 
 */
 
-bool Glyph::isInside(ivec2 pos) const
+size_t Glyph::isInside(ivec2 pos) const
 {
-    size_t intersectCount = 0;
-    size_t cBegin = 0;
-    for (size_t i = 0; i < contours(); ++i)
+    size_t intersections = 0;
+    for (size_t i = 0; i < m_segments.size(); ++i)
     {
-        size_t contourLength = contourEnd(i) - cBegin;
-        if (contourLength < 3) continue; // Degenerate contour.
-        LineSegment cLine;
-        cLine.pos = position(cBegin + contourLength - 1);
-        for (size_t j = cBegin; j < contourEnd(i); ++j)
-        {
-            if (isControl(j))
-            {
-                throw std::logic_error("Bézier curve implementation disabled.");
-                /*QuadraticBezier qb;
-                qb.p0 = cLine.pos;
-                qb.p1 = position(j);
-                qb.p2 = position((j-cBegin+1)%contourLength+cBegin);
-                auto ic = intersectionCount(pos, qb);
-                ///std::cout << "Bezier curve gives " << ic << " intersections.\n";
-                intersectCount += ic;
-                */
-            }
-            else
-            {
-                cLine.dir = position(j) - cLine.pos;
-
-
-                bool rayBeginOnSegment = false;
-                bool ict        = intersects(pos,
-                                             cLine,
-                                             rayBeginOnSegment,
-                                             isZeroAcceptable(j));
-                if (rayBeginOnSegment)
-                {
-                    // The set of points which the glyph consists of contains
-                    // all curves. Therefore if the current point is on a
-                    // segment, it is on the glyph.
-                    return true;
-                }
-                intersectCount += ict;
-            }
-            cLine.pos = position(j);
-        }
-        cBegin = contourEnd(i);
+        bool rayOnSegment = false;
+        intersections += intersects(pos,
+                                    m_segments[i],
+                                    rayOnSegment,
+                                    m_sZeroAccept[i]);
+        if (rayOnSegment) return 255;
     }
-    return intersectCount&1;
+    return intersections;
+
 }
 
 FontInfo::FontInfo(FT_Face face)
@@ -612,18 +616,9 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             ivec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/pixelWidth;
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/pixelHeight;
-            img.setPixel(x, y, 0x3d3d5c);
-            if (auto cnt = glyph.isInside(glyphPos))
-            {
-                std::cout << std::hex << cnt;
-                if (cnt) img.setPixel(x, y, 0xffffff);
-            }
-            else
-            {
-                std::cout << "0";
-            }
+            auto c = glyph.isInside(glyphPos);
+            img.setPixel(x, y, (c<<16) + ((c&1)<<7));
         }
-        std::cout << "\n";
     }
     return img;
 }
