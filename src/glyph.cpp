@@ -146,39 +146,33 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-bool intersects(ivec2 p,
-                LineSegment l,
-                bool& rayBeginOnSegment,
-                bool zeroHitAcceptable) noexcept
+size_t intersects(ivec2 p,
+                  LineSegment l,
+                  bool& rayBeginOnSegment,
+                  bool zeroHitAcceptable) noexcept
 {
-    if (std::abs(2*(p.x-l.pos.x)-l.dir.x) <= std::abs(l.dir.x) &&
-        std::abs(2*(p.y-l.pos.y)-l.dir.y) <= std::abs(l.dir.y))
+    auto subfac1 = p.y - l.pos.y;
+    auto subfac2 = std::abs(2*subfac1-l.dir.y);
+    auto subfac3 = std::abs(l.dir.y);
+    if (subfac2 <= subfac3)
     {
-        rayBeginOnSegment = true;
-        return 0;
-    }
-    // Ray and segment are parallel:
-    if (!l.dir.y)
-    {
-        return 0;
-        // No intersections.
-        if (l.pos.y != p.y) return 0;
-        if (std::abs(2*(p.x-l.pos.x)-l.dir.x) <= std::abs(l.dir.x))
+        auto subfac4 = p.x - l.pos.x;
+        if (l.dir.y * subfac4 == l.dir.x * subfac1 &&
+            std::abs(2*subfac4-l.dir.x) <= std::abs(l.dir.x))
         {
             rayBeginOnSegment = true;
+            return 2;
         }
-        return 0;
     }
-    // lp+t*ld = p
-    // p-lp = t*ld
-    if (l.pos.x - p.x >= 0 && l.pos.y == p.y)
+    if (!l.dir.y) return 0;
+    if (l.pos.y == p.y && l.pos.x >= p.x)
     {
-        return 100*zeroHitAcceptable;
+        return zeroHitAcceptable;
     }
 
     if (dot(perp(l.dir), p-l.pos)*sign(l.dir.y) >= 0)
     {
-        return std::abs(2*(p.y-l.pos.y)-l.dir.y) < std::abs(l.dir.y);
+        return subfac2 < subfac3;
     }
     return 0;
 }
@@ -614,8 +608,8 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
         for (int x = 0; x < pixelWidth; ++x)
         {
             ivec2 glyphPos;
-            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/pixelWidth;
-            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/pixelHeight;
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
             auto c = glyph.isInside(glyphPos);
             img.setPixel(x, y, (c<<16) + ((c&1)<<7));
         }
