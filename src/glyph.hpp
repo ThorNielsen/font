@@ -40,6 +40,12 @@ public:
 
     size_t isInside(ivec2 pos) const;
 private:
+    struct HorizontalSegment
+    {
+        int y;
+        int xmin;
+        int xmax;
+    };
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control,
@@ -54,6 +60,7 @@ private:
                              std::vector<bool>& zeroAcceptable);
 
     std::vector<LineSegment> m_segments;
+    std::vector<HorizontalSegment> m_horSegments;
     std::vector<QuadraticBezier> m_bezier;
 
     std::vector<bool> m_sZeroAccept;

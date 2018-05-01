@@ -3,6 +3,7 @@
 #include "matrix2.hpp"
 #include "primitives.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -49,6 +50,14 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 {
     computeUsableZeroes(contourEnd, position, control, zeroAcceptable);
 
+    struct SegmentHolder
+    {
+        ivec2 p0;
+        ivec2 p1;
+        bool acceptZero;
+    };
+
+    std::vector<SegmentHolder> segments;
     size_t contourBegin = 0;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
@@ -66,12 +75,46 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             }
             else
             {
-                m_segments.push_back({prevPos, cPos});
-                m_sZeroAccept.push_back(zeroAcceptable[i]);
+                if (prevPos.y == cPos.y)
+                {
+                    m_horSegments.push_back({cPos.y,
+                                             std::min(prevPos.x, cPos.x),
+                                             std::max(prevPos.x, cPos.x)});
+                }
+                else
+                {
+                    segments.push_back({prevPos, cPos, zeroAcceptable[i]});
+                }
             }
             prevPos = cPos;
         }
         contourBegin = contourEnd[contour];
+    }
+
+    std::sort(m_horSegments.begin(), m_horSegments.end(),
+              [](const HorizontalSegment& a, const HorizontalSegment& b)
+              {
+                  if (a.y == b.y) return a.xmin < b.xmin;
+                  return a.y < b.y;
+              });
+
+    std::sort(segments.begin(), segments.end(),
+              [](const SegmentHolder& a, const SegmentHolder& b)
+              {
+                  auto aminy = std::min(a.p0.y, a.p1.y);
+                  auto bminy = std::min(b.p0.y, b.p1.y);
+                  if (aminy != bminy)
+                  {
+                      return aminy < bminy;
+                  }
+                  return std::min(a.p0.x, a.p1.x) < std::min(b.p0.x, b.p1.x);
+              });
+    m_segments.resize(segments.size());
+    m_sZeroAccept.resize(segments.size());
+    for (size_t i = 0; i < segments.size(); ++i)
+    {
+        m_segments[i] = LineSegment{segments[i].p0, segments[i].p1};
+        m_sZeroAccept[i] = segments[i].acceptZero;
     }
 
 }
@@ -164,7 +207,7 @@ size_t intersects(ivec2 p,
             return 2;
         }
     }
-    if (!l.dir.y) return 0;
+
     if (l.pos.y == p.y && l.pos.x >= p.x)
     {
         return zeroHitAcceptable;
@@ -550,8 +593,29 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
 size_t Glyph::isInside(ivec2 pos) const
 {
     size_t intersections = 0;
+    for (size_t i = 0; i < m_horSegments.size(); ++i)
+    {
+        if (m_horSegments[i].y < pos.y) continue;
+        if (m_horSegments[i].y > pos.y) break;
+        if (m_horSegments[i].xmin <= pos.x &&
+            pos.x <= m_horSegments[i].xmax)
+        {
+            return 255;
+        }
+    }
+
     for (size_t i = 0; i < m_segments.size(); ++i)
     {
+        if (std::max(m_segments[i].pos.y,
+                     m_segments[i].pos.y+m_segments[i].dir.y) < pos.y)
+        {
+            continue;
+        }
+        if (std::min(m_segments[i].pos.y,
+                     m_segments[i].pos.y+m_segments[i].dir.y) > pos.y)
+        {
+            return intersections;
+        }
         bool rayOnSegment = false;
         intersections += intersects(pos,
                                     m_segments[i],
