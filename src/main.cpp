@@ -8,21 +8,20 @@
 #include <vector>
 #include "primitives.hpp"
 int intersectionCount(Ray ray, QuadraticBezier qb);
-
+bool intersects(ivec2 p,
+                LineSegment l,
+                bool& rayBeginOnSegment,
+                bool zeroHitAcceptable);
 int main()
 {
-    QuadraticBezier qb;
-    qb.p0 = {0,-10};
-    qb.p1 = {10, 0};
-    qb.p2 = {0, 10};
-    //std::cout << "1 == " << intersectionCount(Ray{{0,0},{0,1}}, qb) << std::endl;
-    //std::cout << "0 == " << intersectionCount(Ray{{0,0},{0,-1}}, qb) << std::endl;
-    //std::cout << "2 == " << intersectionCount(Ray{{-10,2},{1,0}}, qb) << std::endl;
-    std::cout << "0 == " << intersectionCount(Ray{{-10,2},{-1,0}}, qb) << std::endl;
-    std::cout << "0 == " << intersectionCount(Ray{{-10,2},{-4,0}}, qb) << std::endl;
+    LineSegment ls;
+    ls.pos = {10, 0};
+    ls.dir = {10, 10};
+    bool dummy;
+    std::cout << intersects({15, 5}, ls, dummy, true) << std::endl;
+    std::cout << intersects({16, 5}, ls, dummy, true) << std::endl;
 
     //return 0;
-
     FT_Library ftLib;
     checkFTError(FT_Init_FreeType(&ftLib));
 
@@ -33,12 +32,12 @@ int main()
                              0,
                              &face));
 
-    checkFTError(FT_Set_Pixel_Sizes(face, 0, 24));
+    checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
     // For complicated glyph, use U+2593.
     // Slightly simpler: U+E5.
     // Even simpler: 'A'.
     // Simplest: 'H'.
-    auto idx = FT_Get_Char_Index(face, 'X');
+    auto idx = FT_Get_Char_Index(face, 0x2593);
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
@@ -65,7 +64,7 @@ int main()
 
     glyph.dumpInfo();
 
-    img = render(info, glyph, 0, 24);
+    img = render(info, glyph, 0, 64);
     img.name = "Custom";
     writeImage(img);
 

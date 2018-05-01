@@ -13,6 +13,9 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
       m_isThirdOrder(outline.n_points),
       m_zeroAcceptable(outline.n_points)
 {
+    // Todo:
+    //     Replace degenerate bezier curves with segments.
+    //     Remove degenerate outlines (if any).
     for (short i = 0; i < outline.n_points; ++i)
     {
         m_position[i] = ivec2{static_cast<S32>(outline.points[i].x),
@@ -24,6 +27,7 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     {
         m_contourEnd[i] = outline.contours[i]+1;
     }
+
     m_info.width = static_cast<int>(metrics.width);
     m_info.height = static_cast<int>(metrics.height);
     m_info.hCursorX = static_cast<int>(metrics.horiBearingX);
@@ -61,7 +65,7 @@ void Glyph::computeUsableZeroes()
         LineSegment cLine;
         cLine.pos = position(cBegin + cLength - 1);
         auto prevPositive = isInitialPositive(cBegin, i);
-        for (size_t j = 0; j < contourEnd(i); ++j)
+        for (size_t j = cBegin; j < contourEnd(i); ++j)
         {
             cLine.dir = position(j) - cLine.pos;
             if (!cLine.dir.y) m_zeroAcceptable[j] = false;
@@ -110,90 +114,42 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-bool intersects(Ray r,
+bool intersects(ivec2 p,
                 LineSegment l,
                 bool& rayBeginOnSegment,
                 bool zeroHitAcceptable)
 {
-    auto ad = l.pos - r.pos;
-    // Test whether ray beginning is on line segment.
-    if (ad.x * l.dir.y == ad.y * l.dir.x)
+    // Ray and segment are parallel:
+    if (!l.dir.y)
     {
-        // Now we know that the ray starts on the line which l lies on. Now we
-        // need to know whether the ray start lies on the segment. We have the
-        // following possible configurations (L is a line, numeric is ray start
-        // possibilities, note that line segment is directed):
-        //         B       E
-        // L:      [->--->-]
-        // 0:  R
-        // 1:      R
-        // 2:          R
-        // 3:              R
-        // 4:                  R
-
-        auto lBegin = dot(l.pos, l.dir);
-        auto rPos = dot(r.pos, l.dir);
-        auto lEnd = dot(l.pos + l.dir, l.dir);
-        if (lBegin <= rPos)
+        // No intersections.
+        if (l.pos.y != p.y) return 0;
+        if (l.dir.x > 0)
         {
-            // Case 1:
-            if (rPos == lBegin) return zeroHitAcceptable;
-            // Case 2&3:
-            if (rPos <= lEnd)
+            if (l.pos.x <= p.x && p.x <= l.pos.x + l.dir.x)
             {
                 rayBeginOnSegment = true;
-                return 1;
             }
-            // Case 4, do nothing.
         }
-        // else: Case 0
-
-        // Test if ray has same direction as line segment:
-        if (ad.x * r.dir.y == ad.y * r.dir.x)
+        if (l.dir.x > 0)
         {
-            // We either have case 0 or case 4. RB and the ray have same
-            // direction then we have an intersection (actually infinitely
-            // many), otherwise not. Note that RB = l.pos - r.pos the ray's
-            // direction is simply r.dir.
-            return dot(l.pos - r.pos, r.dir) > 0;
+            if (l.pos.x >= p.x && p.x >= l.pos.x + l.dir.x)
+            {
+                rayBeginOnSegment = true;
+            }
         }
+        return 0;
+    }
+    if (l.pos.x - p.x >= 0 && l.pos.y == p.y)
+    {
+        return zeroHitAcceptable;
     }
 
-    auto invDet = l.dir.x * r.dir.y - l.dir.y * r.dir.x;
-    if (!invDet)
+    if (dot(perp(l.dir), p-l.pos)*sign(l.dir.y) >= 0)
     {
-        // They are parallel, but cannot be intersecting (tested before).
-        return 0;
+        return std::abs(2*(p.y-l.pos.y)-l.dir.y) < std::abs(l.dir.y);
     }
-    imat2 m( r.dir.y, -r.dir.x,
-            -l.dir.y,  l.dir.x);
-    ivec2 coeffs = m * (r.pos - l.pos);
-    if (invDet < 0)
-    {
-        coeffs.x = -coeffs.x;
-        invDet = -invDet;
-    }
-    else
-    {
-        coeffs.y = -coeffs.y;
-    }
-    if (coeffs.y < 0)
-    {
-        // Line is behind ray.
-        return 0;
-    }
-    if (coeffs.x < 0)
-    {
-        // Ray is below line segment.
-        return 0;
-    }
-    if (invDet <= coeffs.x)
-    {
-        // Ray is above line segment.
-        return 0;
-    }
-    // Ray intersects line segment non-degenerately.
-    return 1;
+    return 0;
 }
 
 #define RETURN(x) return (x)
@@ -564,47 +520,60 @@ int intersectionCount(Ray ray, QuadraticBezier qb)
 }
 
 // Currently only handles line segments.
-bool Glyph::isInside(ivec2 pos, ivec2 dir) const
+int Glyph::isInside(ivec2 pos, ivec2 dir) const
 {
     size_t intersectCount = 0;
     Ray testRay;
     testRay.dir = dir; //{1, 0};
     testRay.pos = pos;
-    size_t contourBegin = 0;
+    size_t cBegin = 0;
     for (size_t i = 0; i < contours(); ++i)
     {
-        size_t contourLength = contourEnd(i) - contourBegin;
+        size_t contourICount = 0;
+        size_t contourLength = contourEnd(i) - cBegin;
         if (contourLength < 3) continue; // Degenerate contour.
         LineSegment cLine;
-        cLine.pos = position(contourBegin + contourLength - 1);
-        for (size_t j = contourBegin; j < contourEnd(i); ++j)
+        cLine.pos = position(cBegin + contourLength - 1);
+        for (size_t j = cBegin; j < contourEnd(i); ++j)
         {
             if (isControl(j))
             {
+                throw new int;
                 QuadraticBezier qb;
                 qb.p0 = cLine.pos;
                 qb.p1 = position(j);
-                qb.p2 = position((j-contourBegin+1)%contourLength+contourBegin);
+                qb.p2 = position((j-cBegin+1)%contourLength+cBegin);
                 auto ic = intersectionCount(testRay, qb);
                 ///std::cout << "Bezier curve gives " << ic << " intersections.\n";
-                intersectCount += ic;
+                contourICount += ic;
 
             }
             else
             {
                 cLine.dir = position(j) - cLine.pos;
 
+
                 bool rayBeginOnSegment = false;
-                intersectCount += intersects(testRay,
+                bool ict        = intersects(testRay.pos,
                                              cLine,
                                              rayBeginOnSegment,
                                              isZeroAcceptable(j));
-                if (rayBeginOnSegment) return true;
+                contourICount += ict;
+                if (rayBeginOnSegment)
+                {
+                    intersectCount = 1;
+                    break;
+                }
             }
             cLine.pos = position(j);
         }
+        if (contourICount&1)
+        {
+            ++intersectCount;
+        }
+        cBegin = contourEnd(i);
     }
-    return intersectCount&1;
+    return intersectCount;
 }
 
 FontInfo::FontInfo(FT_Face face)
@@ -647,30 +616,32 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 
     Image img(pixelWidth, pixelHeight);
 
-    for (int x = 0; x < pixelWidth; ++x)
+    for (int y = 0; y < pixelHeight; ++y)
     {
-        for (int y = 0; y < pixelHeight; ++y)
+        for (int x = 0; x < pixelWidth; ++x)
         {
             ivec2 glyphPos;
-            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
-            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
-            img.setPixel(x, y, 0x000000);
-            if (glyph.isInside(glyphPos, ivec2{1, 0}))
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/pixelWidth;
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/pixelHeight;
+            img.setPixel(x, y, 0x3d3d5c);
+            if (auto cnt = glyph.isInside(glyphPos, ivec2{0, 1}))
             {
-                img.setPixel(x, y, 0xff00ff);
-            }
-            if (glyph.isInside(glyphPos, ivec2{0, 1}))
-            {
-                Colour c = img.pixel(x, y);
-                if (c.g > 0) c.g = 0;
-                else c.g = 255;
+                std::cerr << std::hex << cnt;
+                /*Colour c;
+                c.r = cnt*16;
+                c.b = (cnt&1)*127;
                 img.setPixel(x, y, c);
+                */
+                if (cnt&1) img.setPixel(x, y, 0xffffff);
             }
-            if (img.pixel(x, y).r != img.pixel(x, y).g)
+            else
             {
-                std::cerr << "\033[1;31mBAD PIXEL " << x << ", " << y << "\033[0m\n";
+                std::cerr << "0";
             }
+            ///break;
         }
+        ///break;
+        std::cerr << "\n";
     }
     return img;
 }

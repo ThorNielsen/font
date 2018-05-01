@@ -37,7 +37,7 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
 
-    bool isInside(ivec2 pos, ivec2 dir) const;
+    int isInside(ivec2 pos, ivec2 dir) const;
 
     size_t contours() const { return m_contourEnd.size(); }
     size_t positions() const { return m_position.size(); }
