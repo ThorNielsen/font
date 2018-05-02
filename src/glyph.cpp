@@ -61,7 +61,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         for (size_t i = contourBegin; i < contourEnd[contour]; prevIdx = i++)
         {
             auto cPos = position[i];
-            if (zeroAcceptable[i])
+            if (zeroAcceptable[i] && !control[i])
             {
                 m_critPoints.emplace_back(ivec2{cPos.x, cPos.y});
             }
