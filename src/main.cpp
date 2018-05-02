@@ -53,7 +53,7 @@ int main()
 
     //glyph.dumpInfo();
 
-    Image img = render(info, glyph, 0, 2048);
+    Image img = render(info, glyph, 0, info.emSize);
     img.name = "Custom";
     writeImage(img);
 

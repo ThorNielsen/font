@@ -697,21 +697,22 @@ FontInfo::FontInfo(FT_Face face)
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
     int pixelWidth, pixelHeight;
-    int maxFontWidth = info.bboxMax.x - info.bboxMin.x;
-    int maxFontHeight = info.bboxMax.y - info.bboxMin.y;
+    //int maxFontWidth = info.bboxMax.x - info.bboxMin.x;
+    //int maxFontHeight = info.bboxMax.y - info.bboxMin.y;
+
     if (width <= 0)
     {
         if (height <= 0)
         {
             throw std::runtime_error("Bad render size.");
         }
-        pixelHeight = (height * maxFontHeight) / info.emSize;
+        pixelHeight = (height * glyph.info().height) / info.emSize;
         if (pixelHeight < 2) pixelHeight = 2;
         pixelWidth = pixelHeight * glyph.info().width / glyph.info().height;
     }
     else
     {
-        pixelWidth = (width * maxFontWidth) / info.emSize;
+        pixelWidth = (width * glyph.info().width) / info.emSize;
         if (pixelWidth < 2) pixelWidth = 2;
         pixelHeight = pixelWidth * glyph.info().height / glyph.info().width;
     }
