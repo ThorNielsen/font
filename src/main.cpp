@@ -25,8 +25,8 @@ int main()
     // Slightly simpler: U+E5.
     // Even simpler: 'A'.
     // Simplest: 'H'.
-    bool drawSimple = false;
-    auto idx = FT_Get_Char_Index(face, 'K'*drawSimple+!drawSimple*0x2593);
+    bool drawSimple = true;
+    auto idx = FT_Get_Char_Index(face, 0x416*drawSimple+!drawSimple*0x2593);
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
@@ -51,7 +51,7 @@ int main()
     Glyph glyph(slot->outline, slot->metrics);
     FontInfo info(face);
 
-    //glyph.dumpInfo();
+    glyph.dumpInfo();
 
     Image img = render(info, glyph, 0, info.emSize);
     img.name = "Custom";

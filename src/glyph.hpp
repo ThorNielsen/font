@@ -38,7 +38,7 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
 
-    size_t isInside(ivec2 pos) const;
+    size_t isInside(ivec2 pos) const noexcept;
 private:
     struct HorizontalSegment
     {
@@ -46,6 +46,7 @@ private:
         int xmin;
         int xmax;
     };
+
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control,
@@ -65,6 +66,8 @@ private:
 
     GlyphInfo m_info;
 };
+
+size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept;
 
 struct FontInfo
 {

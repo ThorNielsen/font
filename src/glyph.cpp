@@ -11,25 +11,42 @@
 Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
 {
     std::vector<size_t> contourEnd(outline.n_contours);
-    std::vector<ivec2> position(outline.n_points);
-    std::vector<bool> isControl(outline.n_points);
-    std::vector<bool> zeroAcceptable(outline.n_points);
+    std::vector<ivec2> position;
+    std::vector<bool> isControl;
+    std::vector<bool> zeroAcceptable;
 
+    for (short i = 0; i < outline.n_contours; ++i)
+    {
+        contourEnd[i] = outline.contours[i]+1;
+    }
+
+    short contour = 0;
+    bool prevControl = false;
     for (short i = 0; i < outline.n_points; ++i)
     {
-        position[i] = ivec2{static_cast<S32>(outline.points[i].x),
-                            static_cast<S32>(outline.points[i].y)};
-        isControl[i] = !bit<0>(outline.tags[i]);
+        while (static_cast<size_t>(i) == contourEnd[contour]) ++contour;
+
         bool thirdOrder = bit<1>(outline.tags[i]);
         if (thirdOrder)
         {
             throw std::runtime_error("Third order Bézier curves unsupported.");
         }
+
+        auto currPos = ivec2{static_cast<S32>(outline.points[i].x),
+                             static_cast<S32>(outline.points[i].y)};
+        bool currControl = !bit<0>(outline.tags[i]);
+        if (currControl && prevControl)
+        {
+            position.push_back((currPos + position.back())/2);
+            isControl.push_back(false);
+            ++contourEnd[contour];
+        }
+        prevControl = currControl;
+        position.push_back(currPos);
+        isControl.push_back(currControl);
     }
-    for (short i = 0; i < outline.n_contours; ++i)
-    {
-        contourEnd[i] = outline.contours[i]+1;
-    }
+
+    zeroAcceptable.resize(position.size());
 
     extractOutlines(contourEnd, position, isControl, zeroAcceptable);
 
@@ -42,7 +59,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
 }
-
 
 void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
@@ -58,6 +74,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
     {
         auto prevIdx = contourEnd[contour]-1;
         auto prevPos = position[prevIdx];
+        bool prevControl = control[prevIdx];
         for (size_t i = contourBegin; i < contourEnd[contour]; prevIdx = i++)
         {
             auto cPos = position[i];
@@ -71,8 +88,9 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 nextIdx %= (contourEnd[contour]-contourBegin);
                 nextIdx += contourBegin;
                 m_bezier.push_back({prevPos, cPos, position[nextIdx]});
+                prevControl = true;
             }
-            else
+            else if (!prevControl)
             {
                 if (prevPos.y == cPos.y)
                 {
@@ -91,6 +109,10 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                         m_segments.push_back({cPos, prevPos});
                     }
                 }
+            }
+            else
+            {
+                prevControl = false;
             }
             prevPos = cPos;
         }
@@ -232,12 +254,110 @@ void Glyph::dumpInfo() const
     std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
               << m_info.vCursorY << ")\n";
     std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
+    std::cout << "Segment count: " << m_segments.size() << std::endl;
     for (size_t i = 0; i < m_segments.size(); ++i)
     {
         std::cout << "Segment #" << i << ": ";
         std::cout << m_segments[i].pos << "+t*" << m_segments[i].dir << "\n";
     }
+    std::cout << "Horizontal segments: " << m_horSegments.size() << std::endl;
+    for (size_t i = 0; i < m_horSegments.size(); ++i)
+    {
+        std::cout << "Horizontal segment #" << i << ": ";
+        std::cout << "[" << m_horSegments[i].xmin << ", "
+                         << m_horSegments[i].xmax << "]x{"
+                         << m_horSegments[i].y << "}" << std::endl;
+    }
+    std::cout << "Bezier count: " << m_bezier.size() << std::endl;
+    for (size_t i = 0; i < m_bezier.size(); ++i)
+    {
+        std::cout << "Bezier #" << i << ": ";
+        std::cout << "[" << m_bezier[i].p0 << ", "
+                  << m_bezier[i].p1 << ", "
+                  << m_bezier[i].p2 << "]" << std::endl;
+
+    }
     std::cout << "\n";
+}
+
+size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
+{
+    auto e = bezier.p0.y;
+    auto g = bezier.p1.y;
+    auto k = bezier.p2.y;
+    auto b = pos.y;
+
+    auto A = e-2*g+k;
+    auto B = 2*(g-e);
+    auto C = e-b;
+
+    auto d = bezier.p0.x;
+    auto f = bezier.p1.x;
+    auto h = bezier.p2.x;
+    auto a = pos.x;
+
+    auto E = d-2*f+h;
+    auto F = 2*(f-d);
+    auto G = d-a;
+
+    if (A == 0)
+    {
+        if (!B) return 0;
+        if (B > 0 && !(b > e && C > -B)) return 0;
+        if (B < 0 && !(b < e && C < -B)) return 0;
+        float t = -C / (float)B;
+        return t * (E * t + F) + G >= 0;
+    }
+
+    // Note: This expression may look prone to losing precision, but note that
+    // the only non-integer (and thereby non-exact) variable in the expression
+    // is b.
+    if (e*k-g*g > b*A) return 0;
+    bool minusGood = false;
+    bool plusGood = false;
+    if (std::abs((e*k-g*g) - (b*A)) <= 0.f) // Equality comparison
+    {
+        if (A > 0) plusGood = B < 0 && (-B < 2*A);
+        else plusGood = B > 0 && (-B > 2*A);
+    }
+    else
+    {
+        // Check that t > 0 for minus solution.
+        if (e>=g) minusGood = e>b;
+        else minusGood = A < 0;
+
+        // Same for plus solution.
+        if (e<g) plusGood = e<b;
+        else plusGood = A > 0;
+
+        // Check that it still holds when reversing the curve (in effect testing
+        // whether t < 1).
+        if (plusGood)
+        {
+            if (k >= g) plusGood = k > b;
+            else plusGood = A < 0;
+        }
+        if (minusGood)
+        {
+            if (k < g) minusGood = k < b;
+            else minusGood = A > 0;
+        }
+    }
+
+    // Just check x using floats since doing it exactly means computing a
+    // complicated expression which likely needs 64-bit integers even if all
+    // absolute values of the coordinates are less than 2^12. Also, precision is
+    // probably not an issue since we only use this to get the x-coordinate of
+    // our intersections relative to the ray origin. Yes, it might mean that an
+    // intersection very close to the ray origin may be missed (or a non-
+    // intersection is counted) but since it is very close to the ray origin, it
+    // probably isn't visible.
+
+    float tMinus = (-B - std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
+    float tPlus  = (-B + std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
+
+    return (tMinus * (E * tMinus + F) + G >= 0) * minusGood
+           + (tPlus * (E * tPlus + F) + G >= 0) * plusGood;
 }
 
 size_t intersects(ivec2 p,
@@ -265,377 +385,7 @@ size_t intersects(ivec2 p,
     return 0;
 }
 
-/*
-#define RETURN(x) return (x)
-
-
-// This finds the number of intersections between a ray and a bezier curve using
-// only integer operations (and comparisons and control flow and variables).
-// The derivations are quite complicated (not very difficult, just numerous and
-// time-consuming) so I have probably made a mistake somewhere. The derivations
-// are included below to assist in fixing any potential problems and to better
-// describe what is going on where.
-int intersectionCount(Ray ray, QuadraticBezier qb)
-{
-    std::cout << "Utilised!\n";
-    using Prec = S32;
-    // Extract coefficients from ray and bezier curve:
-    Prec a = ray.pos.x; Prec c = ray.dir.x;
-    Prec b = ray.pos.y; Prec d = ray.dir.y;
-    // The ray can now be written parametrically as
-    // x(s) = a+s
-    // y(s) = b
-    // for s >= 0.
-    Prec e = qb.p0.x; Prec g = qb.p1.x; Prec j = qb.p2.x;
-    Prec f = qb.p0.y; Prec h = qb.p1.y; Prec k = qb.p2.y;
-    // Note that the bezier curve can now be written parametrically as
-    // x(t) = (e-2g+j)t^2+2(g-e)t+e
-    // y(t) = (f-2h+k)t^2+2(h-f)t+f
-    // for 0 <= t < 1. Note that the last inequality must be sharp since an
-    // intersection at an endpoint would also be an intersection at the
-    // beginning of the next curve leading to two intersections in a single
-    // point.
-    // To find the intersection count we simply need to find the number of
-    // solutions to the following equations:
-    // a+s=(e-2g+j)t^2+2(g-e)t+e
-    // b=(f-2h+k)t^2+2(h-f)t+f
-    // By setting
-    {auto A = (f-2*h+k);
-    auto B = 2*(h-f);
-    auto C = f-b;
-    auto D = B*B-4*A*C;
-    // we get the equation At^2+Bt+C=0 with no solutions if D < 0, possibly one
-    // if D = 0 and possibly two if D > 0.
-    if (D < 0) return 0;
-
-    if (D == 0)
-    {
-        // At most one solution.
-        if (A == 0)
-        {
-            // Since  A=D=0, B = 0 and therefore we have a solution only if
-            // C=0.
-            if (C) return 0;
-        }
-        // We have t = -B/2A. If A != 0 then  0 <= t < 1 gives:
-        // If  A > 0  then  0 <= B < -2A  <=>  0 <= t < 1
-        // If  A < 0  then  -2A < B <= 0  <=>  0 <= t < 1.
-        // In total, |B| < |2A| and A*B <= 0  <=>  0 <= t < 1.
-        if (std::abs(B) >= std::abs(2*A) || A*B > 0) return false;
-
-        // We have a solution in the bezier curve. Now we just need to check
-        // that it is indeed a solution in the ray.
-        // We get that  (e-2g+j)t^2+2(g-e)t+(e-a) >= 0. Setting
-        auto E = e-2*g+j;
-        //auto F = 2*(g-e);
-        auto G = e-a;
-        // the solution is simply (see derivation externally):
-        if (C*E-A*G <= sign(A)*B*(g-e)) return 1;
-        return 0;
-    }
-
-
-    }
-    return 0;
-
-
-
-
-    // Of course, we must make sure that the parameters are in range, so a
-    // solution (s, t) to the above is valid iff s >= 0 and 0 <= t < 1.
-    // First we isolate s:
-    // s = c^{-1}((e-2g+j)t^2+2(g-e)t+e-a)
-    // Note that we have assumed that c is invertible. However if it is not, we
-    // can simply flip the coefficients since the equations are symmetric.
-    if (c == 0)
-    {
-        // However what if d is zero as well? Then we have a degenerate ray, so
-        // we simply return zero intersections (we could of course test if the
-        // ray's origin lies on the curve, but giving a degenerate ray is
-        // probably a bug).
-        if (d == 0) return 0;
-        std::swap(a, b); std::swap(c, d);
-        std::swap(e, f); std::swap(g, h); std::swap(j, k);
-    }
-    // Now we can proceed. We insert s in the second equation and re-arranging,
-    // we get  At^2+Bt+C=0  where
-    auto A = d*(e-2*g+j)-c*(f-2*h+k);
-    auto B = 2*(d*(g-e)-c*(h-f));
-    auto C = c*(b-f)+d*(e-a);
-    // are the ugly coefficients. Now we calculate the discriminant:
-    auto D = B*B-4*A*C;
-    // Of course, if the discriminant is negative, we have no solutions. The
-    // situation will look like this:
-    //    *     '
-    //      *    '
-    //       *    '
-    //      *      '
-    //    *         '
-    // Bezier      Line, which contains ray
-    if (D < 0) RETURN(0);///return 0;
-
-    // Depending on whether D = 0 or D > 0, the line and infinitely extended
-    // bezier curve intersects somewhere in one or two points, respectively.
-    // However, we need 0 <= t < 1 and s >= 0. Since we have the coefficients
-    // for At^2+Bt+C=0, we start with t. Note that we do not want to bring
-    // floating-point arithmetic into this so we rearrange until we get integer
-    // inequalities.
-
-    // We need to remember which of our solutions satisfies the parameter
-    // constraints.
-    // If D = 0, sol holds the single solution. Otherwise:
-    bool sol = false;    // Is  -B/2A + sqrt(D)/2A  a valid t? [Plus solution]
-    bool solSub = false; // Is  -B/2A - sqrt(D)/2A  a valid t? [Minus solution]
-
-    // We look at the case where A > 0. The cases where A <= 0 will be handled
-    // later.
-    if (A > 0)
-    {
-        // If D=0 we only have one solution and therefore we get t=-B/2A. This
-        // can be rearranged as follows:
-        // 0 <= t < 1      <=>
-        // 0 <= -B/2A < 1  <=>
-        // 0 <= -B < 2A
-        if (D == 0)
-        {
-            if (0 <= -B && -B < 2*A) sol = true;
-        }
-        else // D > 0
-        {
-            // We have two potential solutions. Let us look at plus:
-            // 0 <= -B/2A + sqrt(D)/2A < 1  <=>
-            // 0 <= -B+sqrt(D) < 2A         <=>
-            // B <= sqrt(D) < 2A+B
-
-            // First we look at B <= sqrt(D):
-            //   if B >= 0 then
-            //     B   <= sqrt(D)  <=>
-            //     B^2 <= D        <=>
-            //     0   <= -4AC     <=>
-            //     0   >= C
-            //   if B < 0 then
-            //     B <= sqrt(D)
-            //     is simply true.
-            // To sum up, the  B <= sqrt(D)  is satisfied iff:
-            // [(B >= 0) and (C <= 0)] or (B <= 0)
-            // This reduces further to  (B <= 0) or (C <= 0)  .
-
-            // Onwards to the second equation,  sqrt(D) < 2A+B  .
-            // If  2A+B <= 0  , this cannot be true. Otherwise we can simply
-            // square both sides and obtain:
-            // D    < 4A^2+4AB+B^2  <=>
-            // -4AC < 4A^2+4AB      <=>
-            // 0    < 4A^2+4AB+4AC  <=>
-            // 0    < A+B+C
-            // Giving that  sqrt(D) < 2A+B  is satisfied iff:
-            // (2A+B > 0) and (A+B+C > 0)
-            if (((B <= 0) || (C <= 0)) && (2*A+B > 0) && (A+B+C > 0))
-            {
-                // The plus root satisfies the constraints on t.
-                sol = true;
-            }
-
-
-            // Now we look at the minus root. We get that it satisfies the t-
-            // constraints iff:
-            // 0 <= -B/2A - sqrt(D)/2A < 1     <=>
-            // 0 <= -B - sqrt(D)       < 2A    <=>
-            // B <= -sqrt(D)           < 2A+B
-            // Again we split this up in two.
-
-            // Looking at  B <= -sqrt(D)  we get that B < 0 and:
-            // B   <= -sqrt(D)  <=>
-            // B^2 >= D         <=>
-            // B^2 >= B^2-4AC   <=>
-            // 0   >= -4AC      <=>
-            // 0   <= C
-            // Therefore  B <= -sqrt(D) iff (B < 0) and (C >= 0)  .
-
-            // Looking at  -sqrt(D) < 2A+B  we again get two cases:
-            // 2A+B >= 0  in which case it is true and
-            // 2A+B < 0  in which case
-            //   -sqrt(D) < 2A+B          <=>
-            //   D        > 4A^2+4AB+B^2  <=>
-            //   B^2-4AC  > 4A^2+4AB+B^2  <=>
-            //   0        > 4A^2+4AB+4AC  <=>
-            //   0        > A+B+C
-            // Therefore  -sqrt(D) < 2A+B iff (2A+B >= 0) or (A+B+C < 0)  .
-            if ((B < 0) && (C >= 0) && ((2*A+B >= 0) || (A+B+C < 0)))
-            {
-                solSub = true;
-            }
-        }
-    }
-    if (A < 0)
-    {
-        // Again we have two potential solutions. This time we need to remember
-        // to flip the inequality whenever we divide or multiply by A.
-
-        // Starting with the plus solution:
-        // 0 <= -B/2A + sqrt(D)/2A < 1     <=>
-        // 0 >=    -B + sqrt(D)    > 2A    <=>
-        // B >=         sqrt(D)    > 2A-B
-
-        // Taking the first one:
-        // B >= sqrt(D)  is true iff B > 0 and
-        // B^2 >= D          <=>
-        // B^2 >= B^2 - 4AC  <=>
-        // 0   >= -4AC       <=>
-        // 0   >= C
-        // That is,  B >= sqrt(D) iff (B > 0) and (C <= 0)  .
-
-        // The second inequality:
-        // sqrt(D) > 2A-B  is true iff 2A-B <= 0 or
-        // D    > 4A^2+B^2-4AB  <=>
-        // -4AC > 4A^2-4AB      <=>
-        // 0    > 4A^2-4AB+4AC  <=>
-        // 0    < A-B+C
-        // That is,  sqrt(D) > 2A-B iff (2A-B <= 0) or (0 < A-B+C)  .
-        if ((B > 0) && (C <= 0) && ((2*A-B <= 0) || (0 < A-B+C)))
-        {
-            sol = true;
-        }
-
-
-        // The minus solution now gives us:
-        // 0  <= -B/2A - sqrt(D)/2A < 1     <=>
-        // 0  >=    -B - sqrt(D)    > 2A    <=>
-        // 0  <=     B + sqrt(D)    < 2A    <=>
-        // -B <=         sqrt(D)    < 2A-B
-
-        // The first one:
-        // -B <= sqrt(D)  is true iff B >= 0 or
-        // B^2 <= D        <=>
-        // B^2 <= B^2-4AC  <=>
-        // 0   <= -4AC     <=>
-        // 0   <= C
-        // That is,  -B <= sqrt(D) iff (B >= 0) or (C >= 0)  .
-
-        // The second one:
-        // sqrt(D) < 2A-B  is true iff 2A-B > 0 and
-        // D    < 4A^2+B^2-4AB  <=>
-        // -4AC < 4A^2-4AB      <=>
-        // 0    < 4A^2-4AB+4AC  <=>
-        // 0    > A-B+C
-        // That is,  sqrt(D) < 2A-B <=> (2A-B > 0) and (A-B+C < 0)  .
-        if (((B >= 0) || (C >= 0)) && (2*A-B > 0) && (A-B+C) < 0)
-        {
-            solSub = true;
-        }
-    }
-
-    // If there are some solutions we still don't know whether they are on the
-    // ray. Remember that s = c^{-1}((e-2g+j)t^2+2(g-e)t+e-a). To see if our
-    // solutions lie on the ray, we need to check that s >= 0, that is:
-    // c^{-1}((e-2g+j)t^2+2(g-e)t+e-a) >= 0  .
-    // We note that  c^{-1} > 0 iff c > 0. Therefore the above inequality
-    // simplifies to:
-    // c((e-2g+j)t^2+2(g-e)t+e-a) >= 0  .
-
-    // We wish to see for which t the polynomial above is positive. So we need
-    // to solve it and check that our t's indeed lie such that it is positive.
-    // By setting
-    auto E = c*(e-2*g+j);
-    auto F = c*(2*(g-e));
-    auto G = c*(e-a);
-    auto H = F*F-4*E*G;
-    // the inequality can be written as  p(t) = Et^2 + Ft + G >= 0  . We note
-    // that if  E > 0  and  H <= 0  we get  p(t) >= 0 no matter the value of t.
-    // This can be seen by noting that only E*t^2 matters asymptotically, and
-    // therefore  E > 0  gives that for some t,  p(t) > 0  . Since  H < 0
-    // p(t) != 0  for all  t  and as  p(t)  is continuous, it must be positive
-    // everywhere. Therefore our solutions will be correct.
-    if (A == 0)
-    {
-        // Equation is now  Bt+C = 0  <=>  t = -C/B  . We have:
-        // 0 <= t < 1     <=>
-        // 0 <= -C/B < 1
-        // In case  B >= 0  , this reduces to  0 <= -C < B  and otherwise
-        // 0 >= -C > B:
-        if ((B >= 0 && C <= 0 && -C < B) || (B < 0 && C >= 0 && -C > B))
-        {
-            // It is a solution. Now we plug it into the next polynomial.
-            if (E > 0 && H <= 0) RETURN(1);///return 1;
-            if (E < 0 && H < 0) RETURN(0);///return 0;
-            // We need to check whether p(-C/B) >= 0. We get:
-            // E*(-C/B)^2-F*C/B+G   >= 0  <=>
-            // E*(-C)^2-B*C*F+B^2*G >= 0  <=>
-            // C^2*E-B*C*F+B^2*G    >= 0  <=>
-            // C*(C*E-B*F)+B^2*G    >= 0
-            if (C*(C*E-B*F)+B*B*G >= 0) RETURN(1);///return 1;
-            RETURN(0);///return 0;
-        }
-        else
-        {
-            RETURN(0);///return 0;
-        }
-    }
-    if (E > 0 && H <= 0) RETURN(sol+solSub);///return sol+solSub;
-    // Likewise, if  E < 0  and  H < 0  ,  p(t) < 0  no matter the value of t.
-    if (E < 0 && H < 0) RETURN(0);///return 0;
-
-    // Now we know all solutions where the line intersects the curve. If there
-    // are none, the curve and ray will not intersect.
-    if (sol + solSub == 0) RETURN(0);///return 0;
-
-    // We start by dealing with specific degenerate cases (the easy ones).
-    if (E == 0)
-    {
-        if (F == 0)
-        {
-            // p(t) >= 0  degenerates to  G >= 0
-            if (G >= 0) RETURN(sol+solSub);///return sol+solSub;
-            RETURN(0);///return 0;
-        }
-        // p(t) >= 0  degenerates to  Ft+G >= 0 iff Ft >= -G.
-        if (D == 0)
-        {
-            // We have only one solution: t = -B/2A. It is a solution if:
-            // F*(-B/2A) >= -G      <=>
-            // F*B/2A    <= G       <=>
-            // 2A*F*B    <= 4A^2*G  <=>
-            // A*F*B     <= 2A^2*G
-            if (A*F*B <= 2*A*A*G) RETURN(sol);///return sol;
-            RETURN(0);///return 0;
-        }
-    }
-    // Let # be shorthand for +- (and -# is then -+). The solutions can now be
-    // written as  -B/2A#sqrt(D)/2A  . We now insert that into  p(t):
-    // E(-B/2A#sqrt(D)/2A)^2+F(-B/2A#sqrt(D)/2A)+G    >= 0             <=>
-    // E(-B#sqrt(D))^2+2AF(-B#sqrt(D))+4A^2G          >= 0             <=>
-    // E(B^2+D-#2B*sqrt(D))-2ABF#2AF*sqrt(D)+4A^2G    >= 0             <=>
-    // E(2B^2-4AC-#2B*sqrt(D))-2ABF#2AF*sqrt(D)+4A^2G >= 0             <=>
-    // E(B^2-2AC-#B*sqrt(D))-ABF#AF*sqrt(D)+2A^2G     >= 0             <=>
-    // B^2*E - 2ACE -# BE*sqrt(D) # AF*sqrt(D)        >= ABF - 2A^2*G  <=>
-    // (#sqrt(D))*(AF-BE) >= ABF + 2ACE - 2A^2*G - B^2*E  <=>
-    // (#sqrt(D))*(AF-BE) >= A(BF+2(CE-AG))-B^2*E   =: S
-    auto S = A*(B*F+2*(C*E-A*G))-B*B*E;
-    auto L = A*F-B*E;
-
-    // (#sqrt(D))*L >= S
-    // Now we start looking at +sqrt(D):
-    // if L >= 0 then:
-    //   S <= 0 or (S > 0 && D*L^2 > S^2)  <=> plus is a root.
-    // if L < 0 then:
-    //   (S <= 0 && D*L^2 <= S^2)  <=> plus is a root.
-    if (L >= 0 && !(S <= 0 || (S > 0 && D*L*L > S*S))) sol = false;
-    if (L < 0 && !(S <= 0 && D*L*L <= S*S)) sol = false;
-
-    // Now look at -sqrt(D):
-    // We get sqrt(D)*L <= -S
-    // if L > 0 then:
-    //   (S <= 0 && D*L^2 <= S^2)  <=> minus is a root
-    // if L <= 0 then:
-    //   S <= 0 or (S > 0 && D*L^2 >= S*S)  <=> minus is a root
-    if (L > 0 && !(S <= 0 && D*L*L <= S*S)) solSub = false;
-    if (L <= 0 && !(S <= 0 || (S > 0 && D*L*L >= S*S))) solSub = false;
-
-    RETURN(sol+solSub);///return sol+solSub;
-}
-
-*/
-
-size_t Glyph::isInside(ivec2 pos) const
+size_t Glyph::isInside(ivec2 pos) const noexcept
 {
     size_t intersections = 0;
     for (auto& cp : m_critPoints)
@@ -665,7 +415,7 @@ size_t Glyph::isInside(ivec2 pos) const
         }
         if (m_segments[i].pos.y > pos.y)
         {
-            return intersections;
+            break;
         }
         bool rayOnSegment = false;
 
@@ -673,6 +423,11 @@ size_t Glyph::isInside(ivec2 pos) const
                                     m_segments[i],
                                     rayOnSegment);
         if (rayOnSegment) return 255;
+    }
+    for (size_t i = 0; i < m_bezier.size(); ++i)
+    {
+        intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
+                                        m_bezier[i]);
     }
     return intersections;
 
@@ -696,9 +451,8 @@ FontInfo::FontInfo(FT_Face face)
 
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
+    height = height;
     int pixelWidth, pixelHeight;
-    //int maxFontWidth = info.bboxMax.x - info.bboxMin.x;
-    //int maxFontHeight = info.bboxMax.y - info.bboxMin.y;
 
     if (width <= 0)
     {
@@ -726,8 +480,11 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             ivec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
+            //std::cerr << "Pixel " << ivec2{x, y} << " to " << glyphPos << " -- ";
             auto c = glyph.isInside(glyphPos);
-            img.setPixel(x, y, (c<<16) + ((c&1)<<7));
+            //std::cerr << c << "\n";
+            img.setPixel(x, y, (c&1)*0xffffff);
+            //img.setPixel(x, y, (c<<16) + ((c&1)<<7));
         }
     }
     return img;
