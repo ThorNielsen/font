@@ -15,16 +15,30 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     std::vector<bool> isControl;
     std::vector<bool> zeroAcceptable;
 
+    if (!outline.n_contours || !outline.n_points)
+    {
+        throw std::runtime_error("Glyph is empty.");
+    }
+
     for (short i = 0; i < outline.n_contours; ++i)
     {
         contourEnd[i] = outline.contours[i]+1;
+        std::cerr << "Contour " << i << " ends at " << contourEnd[i] << "!\n";
     }
 
     short contour = 0;
+    short contourPos = 0;
     bool prevControl = false;
+    std::cerr << "n_points: " << outline.n_points << "\n";
     for (short i = 0; i < outline.n_points; ++i)
     {
-        while (static_cast<size_t>(i) == contourEnd[contour]) ++contour;
+        std::cerr << contourPos << "/" << outline.contours[contour] << " (contour #" << contour << ")\n";
+        if (i == outline.contours[contour]+1)
+        {
+            contourEnd[contour] = contourPos;
+            ++contour;
+            prevControl = false;
+        }
 
         bool thirdOrder = bit<1>(outline.tags[i]);
         if (thirdOrder)
@@ -39,12 +53,24 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
         {
             position.push_back((currPos + position.back())/2);
             isControl.push_back(false);
-            ++contourEnd[contour];
+            ++contourPos;
         }
         prevControl = currControl;
         position.push_back(currPos);
         isControl.push_back(currControl);
+        ++contourPos;
     }
+    contourEnd[contour] = position.size();
+    std::cerr << "Final data:\n";
+    for (size_t i = 0; i < contourEnd.size(); ++i)
+    {
+        std::cerr << "Outline #" << i << ": " << contourEnd[i] << "\n";
+    }
+    std::cerr << contour << "\n";
+    std::cerr << position.size() << "\n";
+    /*
+    while (contourEnd.size() > 1) contourEnd.pop_back();
+    while (position.size() > contourEnd.back()) position.pop_back();*/
 
     zeroAcceptable.resize(position.size());
 
@@ -59,6 +85,7 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
 }
+
 
 void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
@@ -88,7 +115,11 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             }
             else if (!prevControl)
             {
-                if (prevPos.y != cPos.y)
+                if (prevPos.y > cPos.y)
+                {
+                    m_bezier.push_back({prevPos, prevPos, cPos});
+                }
+                else if (prevPos.y < cPos.y)
                 {
                     m_bezier.push_back({prevPos, cPos, cPos});
                 }
@@ -136,21 +167,33 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     auto h = bezier.p2.x;
     auto a = pos.x;
 
-    bool isMonotone = false;
-    if ((e <= g && g <= k) || (e >= g && g >= k)) isMonotone = true;
-    auto lmin = std::min(e, std::min(g, k));
-    if (pos.y < lmin || pos.y > std::max(e, std::max(g, k))) return 0;
-    // Last comparison is for equality, but the compiler doesn't like float
-    // equality comparisons.
-    if (isMonotone && std::abs(lmin-b) <= 0.f)
+    bool eHit = std::abs(e-b) <= 0.f;
+    bool kHit = std::abs(k-b) <= 0.f;
+
+    bool eLow = e < g || (e == g && e < k);
+    bool kLow = k < g || (k == g && k < e);
+
+    size_t extraSols = 0;
+
+    if (eHit && kHit && e < g)
     {
-        if (e < k) return a <= d;
-        return a <= h;
+        return (a <= d) + (a <= h);
     }
+
+    if (eHit && eLow && a <= d)
+    {
+        ++extraSols;
+    }
+    if (kHit && kLow && a <= h)
+    {
+        ++extraSols;
+    }
+
 
     auto A = e-2*g+k;
     auto B = 2*(g-e);
     auto C = e-b;
+    auto K = k-b;
 
 
     auto E = d-2*f+h;
@@ -159,17 +202,16 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
 
     if (A == 0)
     {
-        if (!B) return 0;
-        if (B > 0 && !(b > e && C > -B)) return 0;
-        if (B < 0 && !(b < e && C < -B)) return 0;
+        if (B > 0 && !(b > e && C > -B)) return extraSols;
+        if (B < 0 && !(b < e && C < -B)) return extraSols;
         float t = -C / (float)B;
-        return t * (E * t + F) + G >= 0;
+        return t * (E * t + F) + G >= 0 + extraSols;
     }
 
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
-    if (e*k-g*g > b*A) return 0;
+    if (e*k-g*g > b*A) return extraSols;
     bool minusGood = false;
     bool plusGood = false;
     if (std::abs((e*k-g*g) - (b*A)) <= 0.f) // Equality comparison
@@ -180,23 +222,23 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     else
     {
         // Check that t > 0 for minus solution.
-        if (e>=g) minusGood = e>b;
+        if (e>=g) minusGood = C>0;
         else minusGood = A < 0;
 
         // Same for plus solution.
-        if (e<g) plusGood = e<b;
+        if (e<g) plusGood = C<0;
         else plusGood = A > 0;
 
         // Check that it still holds when reversing the curve (in effect testing
         // whether t < 1).
         if (plusGood)
         {
-            if (k >= g) plusGood = k > b;
+            if (k >= g) plusGood = K>0;
             else plusGood = A < 0;
         }
         if (minusGood)
         {
-            if (k < g) minusGood = k < b;
+            if (k < g) minusGood = K<0;
             else minusGood = A > 0;
         }
     }
@@ -214,7 +256,8 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     float tPlus  = (-B + std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
 
     return (tMinus * (E * tMinus + F) + G >= 0) * minusGood
-           + (tPlus * (E * tPlus + F) + G >= 0) * plusGood;
+           + (tPlus * (E * tPlus + F) + G >= 0) * plusGood
+           + extraSols;
 }
 
 size_t intersects(ivec2 p,
@@ -301,7 +344,8 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
             auto c = glyph.isInside(glyphPos);
-            img.setPixel(x, y, (c&1)*0xffffff);
+            U32 col = ((c&1)*0xffff) << 8;
+            img.setPixel(x, y, col+c*16);
         }
     }
     return img;
