@@ -133,6 +133,21 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         contourBegin = contourEnd[contour];
     }
 
+    for (size_t i = 0; i < m_bezier.size();)
+    {
+        auto* curve = &m_bezier[i];
+        if (curve->p0.y > curve->p2.y)
+        {
+            std::swap(curve->p0, curve->p2);
+        }
+        if (curve->p0.y == curve->p1.y && curve->p1.y == curve->p2.y)
+        {
+            std::swap(m_bezier[i], m_bezier.back());
+            m_bezier.pop_back();
+        }
+        ++i;
+    }
+
     std::sort(m_bezier.begin(), m_bezier.end(),
               [](const QuadraticBezier& a, const QuadraticBezier& b)
               {
