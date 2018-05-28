@@ -40,27 +40,12 @@ public:
 
     size_t isInside(ivec2 pos) const noexcept;
 private:
-    struct HorizontalSegment
-    {
-        int y;
-        int xmin;
-        int xmax;
-    };
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control,
                          std::vector<bool>& zeroAcceptable);
-    void computeCriticalPoints(const std::vector<size_t>& contourEnd,
-                               const std::vector<ivec2>& pos,
-                               std::vector<bool>& critical,
-                               size_t beg, size_t outlineID);
-    void computeUsableZeroes(const std::vector<size_t>& contourEnd,
-                             const std::vector<ivec2>& position,
-                             std::vector<bool>& zeroAcceptable);
 
-    std::vector<LineSegment> m_segments;
-    std::vector<HorizontalSegment> m_horSegments;
     std::vector<ivec2> m_critPoints;
     std::vector<QuadraticBezier> m_bezier;
 

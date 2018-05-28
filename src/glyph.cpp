@@ -65,10 +65,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<bool>& control,
                             std::vector<bool>& zeroAcceptable)
 {
-    computeUsableZeroes(contourEnd, position, zeroAcceptable);
-
-    std::multimap<int, ivec2> horLines;
-
     size_t contourBegin = 0;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
@@ -92,22 +88,9 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             }
             else if (!prevControl)
             {
-                if (prevPos.y == cPos.y)
+                if (prevPos.y != cPos.y)
                 {
-                    horLines.emplace(cPos.y,
-                                     ivec2{std::min(prevPos.x, cPos.x),
-                                           std::max(prevPos.x, cPos.x)});
-                }
-                else
-                {
-                    if (cPos.y > prevPos.y)
-                    {
-                        m_segments.push_back({prevPos, cPos});
-                    }
-                    else
-                    {
-                        m_segments.push_back({cPos, prevPos});
-                    }
+                    m_bezier.push_back({prevPos, cPos, cPos});
                 }
             }
             else
@@ -117,130 +100,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             prevPos = cPos;
         }
         contourBegin = contourEnd[contour];
-    }
-
-    for (auto line = horLines.begin(), elem = line;
-         line != horLines.end();
-         ++line)
-    {
-        std::vector<ivec2> hseg;
-        for (; elem != horLines.end() && elem->first == line->first; ++elem)
-        {
-            hseg.push_back(elem->second);
-        }
-        std::sort(hseg.begin(), hseg.end(),
-                  [](const ivec2& a, const ivec2& b)
-                  {
-                      if (a.x == b.x) return a.y < b.y;
-                      return a.x < b.x;
-                  });
-        int prevEnd = std::numeric_limits<int>::min();
-        for (auto& seg : hseg)
-        {
-            if (seg.x <= prevEnd)
-            {
-                m_horSegments.back().xmax = seg.y;
-            }
-            else
-            {
-                m_horSegments.push_back({line->first, seg.x, seg.y});
-            }
-            prevEnd = seg.y;
-        }
-    }
-
-    std::sort(m_critPoints.begin(), m_critPoints.end(),
-              [](const ivec2& a, const ivec2 b)
-              {
-                  return a.y < b.y;
-              });
-
-    std::sort(m_segments.begin(), m_segments.end(),
-              [](const LineSegment& a, const LineSegment& b)
-              {
-                  if (a.pos.y == b.pos.y) return a.pos.x < b.pos.x;
-                  return a.pos.y < b.pos.y;
-              });
-
-}
-
-inline size_t increment(size_t val, size_t outlineBegin, size_t outlineLength)
-{
-    return (val+1-outlineBegin)%outlineLength+outlineBegin;
-}
-
-inline size_t decrement(size_t val, size_t outlineBegin, size_t outlineLength)
-{
-    return ((val+outlineLength)-1-outlineBegin)%outlineLength+outlineBegin;
-}
-
-int leftSign(size_t i, size_t beg, size_t len, const std::vector<ivec2>& pos)
-{
-    return (pos[decrement(i, beg, len)].y - pos[i].y);
-    return -(pos[i].y - pos[decrement(i, beg, len)].y);
-}
-
-int rightSign(size_t i, size_t beg, size_t len, const std::vector<ivec2>& pos)
-{
-    return (pos[increment(i, beg, len)].y - pos[i].y);
-}
-
-void Glyph::computeCriticalPoints(const std::vector<size_t>& contourEnd,
-                                  const std::vector<ivec2>& pos,
-                                  std::vector<bool>& critical,
-                                  size_t beg, size_t outlineID)
-{
-    size_t len = contourEnd[outlineID]-beg;
-    size_t j = increment(beg, beg, len);
-    while (!leftSign(j, beg, len, pos) && j != beg)
-    {
-        j = increment(j, beg, len);
-    }
-    if (j == beg)
-    {
-        throw std::runtime_error("Degenerate outline.");
-    }
-
-    size_t iter = len;
-    while (iter)
-    {
-        size_t k = j;
-        while (!rightSign(k, beg, len, pos))
-        {
-            k = increment(k, beg, len);
-            --iter;
-        }
-        auto left = leftSign(j, beg, len, pos);
-        auto right = rightSign(k, beg, len, pos);
-        if (left*right < 0)
-        {
-            if (left > 0)
-            {
-                if (critical[j]) break;
-                critical[j] = true;
-            }
-            if (right > 0)
-            {
-                if (critical[k]) break;
-                critical[k] = true;
-            }
-        }
-        j = increment(k, beg, len);
-        --iter;
-    }
-}
-
-
-void Glyph::computeUsableZeroes(const std::vector<size_t>& contourEnd,
-                                const std::vector<ivec2>& position,
-                                std::vector<bool>& zeroAcceptable)
-{
-    zeroAcceptable.resize(position.size(), false);
-    size_t cBegin = 0;
-    for (size_t i = 0; i < contourEnd.size(); ++i)
-    {
-        computeCriticalPoints(contourEnd, position, zeroAcceptable, cBegin, i);
-        cBegin = contourEnd[i];
     }
 }
 
@@ -254,20 +113,6 @@ void Glyph::dumpInfo() const
     std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
               << m_info.vCursorY << ")\n";
     std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
-    std::cout << "Segment count: " << m_segments.size() << std::endl;
-    for (size_t i = 0; i < m_segments.size(); ++i)
-    {
-        std::cout << "Segment #" << i << ": ";
-        std::cout << m_segments[i].pos << "+t*" << m_segments[i].dir << "\n";
-    }
-    std::cout << "Horizontal segments: " << m_horSegments.size() << std::endl;
-    for (size_t i = 0; i < m_horSegments.size(); ++i)
-    {
-        std::cout << "Horizontal segment #" << i << ": ";
-        std::cout << "[" << m_horSegments[i].xmin << ", "
-                         << m_horSegments[i].xmax << "]x{"
-                         << m_horSegments[i].y << "}" << std::endl;
-    }
     std::cout << "Bezier count: " << m_bezier.size() << std::endl;
     for (size_t i = 0; i < m_bezier.size(); ++i)
     {
@@ -286,15 +131,27 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     auto g = bezier.p1.y;
     auto k = bezier.p2.y;
     auto b = pos.y;
+    auto d = bezier.p0.x;
+    auto f = bezier.p1.x;
+    auto h = bezier.p2.x;
+    auto a = pos.x;
+
+    bool isMonotone = false;
+    if ((e <= g && g <= k) || (e >= g && g >= k)) isMonotone = true;
+    auto lmin = std::min(e, std::min(g, k));
+    if (pos.y < lmin || pos.y > std::max(e, std::max(g, k))) return 0;
+    // Last comparison is for equality, but the compiler doesn't like float
+    // equality comparisons.
+    if (isMonotone && std::abs(lmin-b) <= 0.f)
+    {
+        if (e < k) return a <= d;
+        return a <= h;
+    }
 
     auto A = e-2*g+k;
     auto B = 2*(g-e);
     auto C = e-b;
 
-    auto d = bezier.p0.x;
-    auto f = bezier.p1.x;
-    auto h = bezier.p2.x;
-    auto a = pos.x;
 
     auto E = d-2*f+h;
     auto F = 2*(f-d);
@@ -388,42 +245,6 @@ size_t intersects(ivec2 p,
 size_t Glyph::isInside(ivec2 pos) const noexcept
 {
     size_t intersections = 0;
-    for (auto& cp : m_critPoints)
-    {
-        if (cp.y < pos.y) continue;
-        if (cp.y > pos.y) break;
-        intersections += pos.x <= cp.x;
-        if (pos.x == cp.x) return 251;
-    }
-
-    for (size_t i = 0; i < m_horSegments.size(); ++i)
-    {
-        if (m_horSegments[i].y < pos.y) continue;
-        if (m_horSegments[i].y > pos.y) break;
-        if (m_horSegments[i].xmin <= pos.x &&
-            pos.x <= m_horSegments[i].xmax)
-        {
-            return 253;
-        }
-    }
-
-    for (size_t i = 0; i < m_segments.size(); ++i)
-    {
-        if (m_segments[i].pos.y+m_segments[i].dir.y < pos.y)
-        {
-            continue;
-        }
-        if (m_segments[i].pos.y > pos.y)
-        {
-            break;
-        }
-        bool rayOnSegment = false;
-
-        intersections += intersects(pos,
-                                    m_segments[i],
-                                    rayOnSegment);
-        if (rayOnSegment) return 255;
-    }
     for (size_t i = 0; i < m_bezier.size(); ++i)
     {
         intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
@@ -451,7 +272,6 @@ FontInfo::FontInfo(FT_Face face)
 
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 {
-    height = height;
     int pixelWidth, pixelHeight;
 
     if (width <= 0)
@@ -480,11 +300,8 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             ivec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
-            //std::cerr << "Pixel " << ivec2{x, y} << " to " << glyphPos << " -- ";
             auto c = glyph.isInside(glyphPos);
-            //std::cerr << c << "\n";
             img.setPixel(x, y, (c&1)*0xffffff);
-            //img.setPixel(x, y, (c<<16) + ((c&1)<<7));
         }
     }
     return img;

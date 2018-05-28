@@ -23,6 +23,7 @@ int main()
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
     // For complicated glyph, use U+2593.
     // Slightly simpler: U+E5.
+    // More simple: U+416.
     // Even simpler: 'A'.
     // Simplest: 'H'.
     bool drawSimple = true;
@@ -31,23 +32,6 @@ int main()
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
     FT_GlyphSlot slot = face->glyph;
-/*
-    FT_Bitmap bitmap = slot->bitmap;
-    Image img(bitmap.width, bitmap.rows, "Character");
-
-    const U8* bmData = static_cast<const U8*>(bitmap.buffer);
-    auto pitch = bitmap.pitch;
-
-    for (size_t y = 0; y < img.height; ++y)
-    {
-        for (size_t x = 0; x < img.width; ++x)
-        {
-            U8 val = bmData[y*pitch+x];
-            img.setPixel(x, y, Colour(val, val, val));
-        }
-    }
-    writeImage(img);
-*/
     Glyph glyph(slot->outline, slot->metrics);
     FontInfo info(face);
 
