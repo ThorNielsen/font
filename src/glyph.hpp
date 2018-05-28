@@ -37,8 +37,7 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
-
-    size_t isInside(ivec2 pos) const noexcept;
+    size_t isInside(ivec2 pos, size_t& beginAt) const noexcept;
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,

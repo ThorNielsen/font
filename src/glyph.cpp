@@ -267,13 +267,17 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
            + extraSols;
 }
 
-size_t Glyph::isInside(ivec2 pos) const noexcept
+size_t Glyph::isInside(ivec2 pos, size_t& beginAt) const noexcept
 {
     size_t intersections = 0;
-    for (size_t i = 0; i < m_bezier.size(); ++i)
+    while (beginAt < m_bezier.size() && m_bezier[beginAt].maxY() < pos.y)
+    {
+        ++beginAt;
+    }
+    for (size_t i = beginAt; i < m_bezier.size(); ++i)
     {
         if (m_bezier[i].minY() > pos.y) return intersections;
-        if (m_bezier[i].maxY() < pos.y) continue;
+        if (m_bezier[i].maxX() < pos.x) continue;
         intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
                                         m_bezier[i]);
     }
@@ -320,14 +324,15 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 
     Image img(pixelWidth, pixelHeight);
 
-    for (int y = 0; y < pixelHeight; ++y)
+    size_t beginAt = 0;
+    for (int y = pixelHeight-1; y >= 0; --y)
     {
         for (int x = 0; x < pixelWidth; ++x)
         {
             ivec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
-            auto c = glyph.isInside(glyphPos);
+            auto c = glyph.isInside(glyphPos, beginAt);
             U32 col = ((c&1)*0xffff) << 8;
             img.setPixel(x, y, col+c*16);
         }
