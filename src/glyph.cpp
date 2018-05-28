@@ -132,6 +132,13 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         }
         contourBegin = contourEnd[contour];
     }
+
+    std::sort(m_bezier.begin(), m_bezier.end(),
+              [](const QuadraticBezier& a, const QuadraticBezier& b)
+              {
+                  if (a.minY() == b.minY()) return a.minY() < b.minY();
+                  return a.minY() < b.minY();
+              });
 }
 
 void Glyph::dumpInfo() const
@@ -260,42 +267,13 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
            + extraSols;
 }
 
-size_t intersects(ivec2 p,
-                  LineSegment l,
-                  bool& rayBeginOnSegment) noexcept
-{
-    auto subfac1 = p.y - l.pos.y;
-    auto subfac2 = std::abs(2*subfac1-l.dir.y);
-    if (subfac2 <= l.dir.y)
-    {
-        auto subfac4 = p.x - l.pos.x;
-        if (l.dir.y * subfac4 == l.dir.x * subfac1 &&
-            std::abs(2*subfac4-l.dir.x) <= std::abs(l.dir.x))
-        {
-            rayBeginOnSegment = true;
-            return 2;
-        }
-    }
-
-
-    if (dot(perp(l.dir), p-l.pos) > 0)
-    {
-        return subfac2 < l.dir.y;
-    }
-    return 0;
-}
-
 size_t Glyph::isInside(ivec2 pos) const noexcept
 {
     size_t intersections = 0;
     for (size_t i = 0; i < m_bezier.size(); ++i)
     {
-        if (std::min(m_bezier[i].p0.y,
-                     std::min(m_bezier[i].p1.y,
-                              m_bezier[i].p2.y)) > pos.y) continue;
-        if (std::max(m_bezier[i].p0.y,
-                     std::max(m_bezier[i].p1.y,
-                              m_bezier[i].p2.y)) < pos.y) continue;
+        if (m_bezier[i].minY() > pos.y) return intersections;
+        if (m_bezier[i].maxY() < pos.y) continue;
         intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
                                         m_bezier[i]);
     }
