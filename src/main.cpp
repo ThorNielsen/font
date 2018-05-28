@@ -10,17 +10,6 @@
 
 int main()
 {
-    //QuadraticBezier curve{{1126, 588}, {1083, 618}, {1027, 615}};
-    //std::cerr << intersectCount({1000, 615}, curve); // Expect 2
-    //QuadraticBezier curve{{988, 705}, {1049, 709}, {1092, 735}};
-    //std::cerr << intersectCount({980, 706}, curve); // Expect 1
-    //QuadraticBezier curve{{988, 1155}, {988, 705}, {988, 705}};
-    //std::cerr << intersectCount({980, 705}, curve); // Expect 1
-    //QuadraticBezier curve{{1320, 270}, {1296, 333}, {1268, 396}};
-    //std::cerr << intersectCount({1300, 270}, curve); // Expect 1
-    //QuadraticBezier curve{{1041, 645}, {1058, 645}, {1080, 648}};
-    //std::cerr << intersectCount({1000, 645}, curve); // Expect 1
-    //return 0;
     FT_Library ftLib;
     checkFTError(FT_Init_FreeType(&ftLib));
 

@@ -290,6 +290,12 @@ size_t Glyph::isInside(ivec2 pos) const noexcept
     size_t intersections = 0;
     for (size_t i = 0; i < m_bezier.size(); ++i)
     {
+        if (std::min(m_bezier[i].p0.y,
+                     std::min(m_bezier[i].p1.y,
+                              m_bezier[i].p2.y)) > pos.y) continue;
+        if (std::max(m_bezier[i].p0.y,
+                     std::max(m_bezier[i].p1.y,
+                              m_bezier[i].p2.y)) < pos.y) continue;
         intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
                                         m_bezier[i]);
     }
