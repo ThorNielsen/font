@@ -16,7 +16,8 @@ int main()
     FT_Face face;
 
     checkFTError(FT_New_Face(ftLib,
-                             "seriffont.ttf",
+                             //"fonts/decorative.ttf",
+                             "fonts/serif.ttf",
                              0,
                              &face));
 
@@ -27,7 +28,8 @@ int main()
     // Even simpler: 'A'.
     // Simplest: 'H'.
     bool drawSimple = true;
-    auto idx = FT_Get_Char_Index(face, 0x1c6*drawSimple+!drawSimple*0x2593);
+    //auto idx = FT_Get_Char_Index(face, 0xd8*drawSimple+!drawSimple*0x2593);
+    auto idx = FT_Get_Char_Index(face, 0x416*drawSimple+!drawSimple*0x2593);
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 

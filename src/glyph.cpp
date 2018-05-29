@@ -29,10 +29,8 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     short contour = 0;
     short contourPos = 0;
     bool prevControl = false;
-    std::cerr << "n_points: " << outline.n_points << "\n";
     for (short i = 0; i < outline.n_points; ++i)
     {
-        std::cerr << contourPos << "/" << outline.contours[contour] << " (contour #" << contour << ")\n";
         if (i == outline.contours[contour]+1)
         {
             contourEnd[contour] = contourPos;
@@ -61,16 +59,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
         ++contourPos;
     }
     contourEnd[contour] = position.size();
-    std::cerr << "Final data:\n";
-    for (size_t i = 0; i < contourEnd.size(); ++i)
-    {
-        std::cerr << "Outline #" << i << ": " << contourEnd[i] << "\n";
-    }
-    std::cerr << contour << "\n";
-    std::cerr << position.size() << "\n";
-    /*
-    while (contourEnd.size() > 1) contourEnd.pop_back();
-    while (position.size() > contourEnd.back()) position.pop_back();*/
 
     zeroAcceptable.resize(position.size());
 
@@ -115,14 +103,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             }
             else if (!prevControl)
             {
-                if (prevPos.y > cPos.y)
-                {
-                    m_bezier.push_back({prevPos, prevPos, cPos});
-                }
-                else if (prevPos.y < cPos.y)
-                {
-                    m_bezier.push_back({prevPos, cPos, cPos});
-                }
+                m_bezier.push_back({prevPos, prevPos, cPos});
             }
             else
             {
@@ -131,21 +112,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
             prevPos = cPos;
         }
         contourBegin = contourEnd[contour];
-    }
-
-    for (size_t i = 0; i < m_bezier.size();)
-    {
-        auto* curve = &m_bezier[i];
-        if (curve->p0.y > curve->p2.y)
-        {
-            std::swap(curve->p0, curve->p2);
-        }
-        if (curve->p0.y == curve->p1.y && curve->p1.y == curve->p2.y)
-        {
-            std::swap(m_bezier[i], m_bezier.back());
-            m_bezier.pop_back();
-        }
-        ++i;
     }
 
     std::sort(m_bezier.begin(), m_bezier.end(),
@@ -192,8 +158,8 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     bool eHit = std::abs(e-b) <= 0.f;
     bool kHit = std::abs(k-b) <= 0.f;
 
-    bool eLow = e < g || (e == g && e < k);
-    bool kLow = k < g || (k == g && k < e);
+    bool eLow = e < g || (e == g && e <= k);
+    bool kLow = k < g || (k == g && k <= e);
 
     size_t extraSols = 0;
 
@@ -222,8 +188,10 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     auto F = 2*(f-d);
     auto G = d-a;
 
+
     if (A == 0)
     {
+        if (!B) return extraSols;
         if (B > 0 && !(b > e && C > -B)) return extraSols;
         if (B < 0 && !(b < e && C < -B)) return extraSols;
         float t = -C / (float)B;
@@ -233,7 +201,7 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
-    if (e*k-g*g > b*A) return extraSols;
+    if (e*k-g*g >= b*A) return extraSols;
     bool minusGood = false;
     bool plusGood = false;
     if (std::abs((e*k-g*g) - (b*A)) <= 0.f) // Equality comparison
@@ -282,7 +250,7 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
            + extraSols;
 }
 
-size_t Glyph::isInside(ivec2 pos, size_t& beginAt) const noexcept
+size_t Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
     size_t intersections = 0;
     while (beginAt < m_bezier.size() && m_bezier[beginAt].maxY() < pos.y)
@@ -293,8 +261,7 @@ size_t Glyph::isInside(ivec2 pos, size_t& beginAt) const noexcept
     {
         if (m_bezier[i].minY() > pos.y) return intersections;
         if (m_bezier[i].maxX() < pos.x) continue;
-        intersections += intersectCount(vec2{(float)pos.x, (float)pos.y},
-                                        m_bezier[i]);
+        intersections += intersectCount(pos, m_bezier[i]);
     }
     return intersections;
 
@@ -344,12 +311,12 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
     {
         for (int x = 0; x < pixelWidth; ++x)
         {
-            ivec2 glyphPos;
-            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/(pixelWidth-1);
-            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/(pixelHeight-1);
+            vec2 glyphPos;
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth-1);
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight-1);
             auto c = glyph.isInside(glyphPos, beginAt);
             U32 col = ((c&1)*0xffff) << 8;
-            img.setPixel(x, y, col+c*16);
+            img.setPixel(x, y, col+c);
         }
     }
     return img;
