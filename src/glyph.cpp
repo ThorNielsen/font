@@ -144,7 +144,16 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
+// Note that to handle self-intersecting glyphs (for example where two different
+// outlines intersect (which sometimes happens for e.g. ffl-ligatures)) this
+// computes not how many intersections there are but instead a number signifying
+// in which direction a curve is intersected. This means that a point is
+// considered outside the glyph if and only if a ray from this point will
+// intersect the same number of curves having opposite direction (e.g. if it
+// intersects two curves where the point is to the right of these, then it must
+// intersect two curves which it is to the left of in order to be considered
+// outside all outlines).
+int intersect(vec2 pos, QuadraticBezier bezier) noexcept
 {
     auto e = bezier.p0.y;
     auto g = bezier.p1.y;
@@ -165,7 +174,8 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
 
     if (eHit && kHit && e < g)
     {
-        return (a <= d) + (a <= h);
+        // Todo: Find direction
+        return (a <= d) - (a <= h);
     }
 
     if (eHit && eLow && a <= d)
@@ -174,7 +184,7 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     }
     if (kHit && kLow && a <= h)
     {
-        ++extraSols;
+        --extraSols;
     }
 
 
@@ -191,17 +201,23 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
 
     if (A == 0)
     {
+        int mul = 1;
+        if (e <= k) mul = -1;
         if (!B) return extraSols;
-        if (B > 0 && !(b > e && C > -B)) return extraSols;
-        if (B < 0 && !(b < e && C < -B)) return extraSols;
+        if (B > 0 && !(b > e && C > -B)) return extraSols * mul;
+        if (B < 0 && !(b < e && C < -B)) return extraSols * mul;
         float t = -C / (float)B;
-        return t * (E * t + F) + G >= 0 + extraSols;
+        return (t * (E * t + F) + G >= 0) * mul + extraSols * mul;
     }
 
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
-    if (e*k-g*g >= b*A) return extraSols;
+    if (e*k-g*g >= b*A)
+    {
+        // Todo: find direction.
+        return extraSols;
+    }
 
     bool minusGood = false;
     bool plusGood = false;
@@ -242,15 +258,15 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     auto tpX = tPlus * (E * tPlus + F) + G;
 
     auto cnt = (tmX >= 0) * minusGood
-               + (tpX >= 0) * plusGood
+               - (tpX >= 0) * plusGood
                + extraSols;
 
     return cnt;
 }
 
-size_t Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
+bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
-    size_t intersections = 0;
+    int intersections = 0;
     while (beginAt < m_bezier.size() && m_bezier[beginAt].maxY() < pos.y)
     {
         ++beginAt;
@@ -259,7 +275,8 @@ size_t Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     {
         if (m_bezier[i].minY() > pos.y) return intersections;
         if (m_bezier[i].maxX() < pos.x) continue;
-        intersections += intersectCount(pos, m_bezier[i]);
+        int ic = intersect(pos, m_bezier[i]);
+        intersections += ic;
     }
     return intersections;
 
@@ -312,9 +329,8 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth-1);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight-1);
-            auto c = glyph.isInside(glyphPos, beginAt);
-            U32 col = ((c&1)*0xffff) << 8;
-            img.setPixel(x, y, col+c);
+            auto inside = glyph.isInside(glyphPos, beginAt);
+            img.setPixel(x, y, inside ? 0xffffff : 0);
         }
     }
     return img;

@@ -37,7 +37,7 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
-    size_t isInside(vec2 pos, size_t& beginAt) const noexcept;
+    bool isInside(vec2 pos, size_t& beginAt) const noexcept;
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
@@ -51,7 +51,7 @@ private:
     GlyphInfo m_info;
 };
 
-size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept;
+int intersect(vec2 pos, QuadraticBezier bezier) noexcept;
 
 struct FontInfo
 {

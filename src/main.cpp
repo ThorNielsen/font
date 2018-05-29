@@ -22,12 +22,14 @@ int main()
 
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
     // For complicated glyph, use U+2593.
+    // Self-intersecting (often): U+FB04.
     // Slightly simpler: U+E5.
     // More simple: U+416.
     // Even simpler: 'A'.
     // Simplest: 'H'.
     bool drawSimple = true;
-    auto idx = FT_Get_Char_Index(face, 0xe6*drawSimple+!drawSimple*0x2593);
+    //auto idx = FT_Get_Char_Index(face, 0xe6*drawSimple+!drawSimple*0x2593);
+    auto idx = FT_Get_Char_Index(face, 0xa5*drawSimple+!drawSimple*0x2593);
     checkFTError(FT_Load_Glyph(face, idx, FT_LOAD_NO_SCALE));
     checkFTError(FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL));
 
