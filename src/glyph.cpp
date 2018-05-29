@@ -202,35 +202,28 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
     if (e*k-g*g >= b*A) return extraSols;
+
     bool minusGood = false;
     bool plusGood = false;
-    if (std::abs((e*k-g*g) - (b*A)) <= 0.f) // Equality comparison
+    // Check that t > 0 for minus solution.
+    if (e>=g) minusGood = C>0;
+    else minusGood = A < 0;
+
+    // Same for plus solution.
+    if (e<g) plusGood = C<0;
+    else plusGood = A > 0;
+
+    // Check that it still holds when reversing the curve (in effect testing
+    // whether t < 1).
+    if (plusGood)
     {
-        if (A > 0) plusGood = B < 0 && (-B < 2*A);
-        else plusGood = B > 0 && (-B > 2*A);
+        if (k >= g) plusGood = K>0;
+        else plusGood = A < 0;
     }
-    else
+    if (minusGood)
     {
-        // Check that t > 0 for minus solution.
-        if (e>=g) minusGood = C>0;
-        else minusGood = A < 0;
-
-        // Same for plus solution.
-        if (e<g) plusGood = C<0;
-        else plusGood = A > 0;
-
-        // Check that it still holds when reversing the curve (in effect testing
-        // whether t < 1).
-        if (plusGood)
-        {
-            if (k >= g) plusGood = K>0;
-            else plusGood = A < 0;
-        }
-        if (minusGood)
-        {
-            if (k < g) minusGood = K<0;
-            else minusGood = A > 0;
-        }
+        if (k < g) minusGood = K<0;
+        else minusGood = A > 0;
     }
 
     // Just check x using floats since doing it exactly means computing a
@@ -245,9 +238,14 @@ size_t intersectCount(vec2 pos, QuadraticBezier bezier) noexcept
     float tMinus = (-B - std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
     float tPlus  = (-B + std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
 
-    return (tMinus * (E * tMinus + F) + G >= 0) * minusGood
-           + (tPlus * (E * tPlus + F) + G >= 0) * plusGood
-           + extraSols;
+    auto tmX = tMinus * (E * tMinus + F) + G;
+    auto tpX = tPlus * (E * tPlus + F) + G;
+
+    auto cnt = (tmX >= 0) * minusGood
+               + (tpX >= 0) * plusGood
+               + extraSols;
+
+    return cnt;
 }
 
 size_t Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
