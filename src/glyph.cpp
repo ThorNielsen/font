@@ -13,7 +13,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     std::vector<size_t> contourEnd(outline.n_contours);
     std::vector<ivec2> position;
     std::vector<bool> isControl;
-    std::vector<bool> zeroAcceptable;
 
     if (!outline.n_contours || !outline.n_points)
     {
@@ -23,7 +22,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     for (short i = 0; i < outline.n_contours; ++i)
     {
         contourEnd[i] = outline.contours[i]+1;
-        std::cerr << "Contour " << i << " ends at " << contourEnd[i] << "!\n";
     }
 
     short contour = 0;
@@ -60,9 +58,7 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     }
     contourEnd[contour] = position.size();
 
-    zeroAcceptable.resize(position.size());
-
-    extractOutlines(contourEnd, position, isControl, zeroAcceptable);
+    extractOutlines(contourEnd, position, isControl);
 
     m_info.width = static_cast<int>(metrics.width);
     m_info.height = static_cast<int>(metrics.height);
@@ -77,8 +73,7 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
 
 void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
-                            const std::vector<bool>& control,
-                            std::vector<bool>& zeroAcceptable)
+                            const std::vector<bool>& control)
 {
     size_t contourBegin = 0;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
@@ -89,10 +84,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         for (size_t i = contourBegin; i < contourEnd[contour]; prevIdx = i++)
         {
             auto cPos = position[i];
-            if (zeroAcceptable[i] && !control[i])
-            {
-                m_critPoints.emplace_back(ivec2{cPos.x, cPos.y});
-            }
             if (control[i])
             {
                 auto nextIdx = i+1-contourBegin;
@@ -120,6 +111,14 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                   if (a.minY() == b.minY()) return a.minY() < b.minY();
                   return a.minY() < b.minY();
               });
+}
+
+void Glyph::reverseCurves()
+{
+    for (auto& bezier : m_bezier)
+    {
+        std::swap(bezier.p0, bezier.p2);
+    }
 }
 
 void Glyph::dumpInfo() const

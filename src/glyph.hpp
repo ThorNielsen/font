@@ -38,14 +38,14 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
     bool isInside(vec2 pos, size_t& beginAt) const noexcept;
+
+    void reverseCurves();
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
-                         const std::vector<bool>& control,
-                         std::vector<bool>& zeroAcceptable);
+                         const std::vector<bool>& control);
 
-    std::vector<ivec2> m_critPoints;
     std::vector<QuadraticBezier> m_bezier;
 
     GlyphInfo m_info;

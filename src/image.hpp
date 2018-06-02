@@ -62,6 +62,21 @@ struct Image
     }
 };
 
+inline bool operator==(const Image& a, const Image& b)
+{
+    if (a.width != b.width || a.height != b.height) return false;
+    for (size_t i = 0; i < a.p.size(); ++i)
+    {
+        if (a.p[i] != b.p[i]) return false;
+    }
+    return true;
+}
+
+inline bool operator!=(const Image& a, const Image& b)
+{
+    return !(a == b);
+}
+
 void writeImage(const Image& img);
 
 #endif // IMAGE_HPP_INCLUDED
