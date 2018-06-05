@@ -50,12 +50,11 @@ int main()
             rev.name = "output/" + fontname + "_" + name.str() + "_r.pnm";
             std::cerr << " done!\n";
             if (img != rev)
-            {
                 std::cerr << "\033[1;31mWARNING\033[0m: glyph "
                           << name.str() << " is rendered inconsistently.\n";
-                writeImage(img);
+            writeImage(img);
+            if (img != rev)
                 writeImage(rev);
-            }
         }
         catch (const std::runtime_error& err)
         {

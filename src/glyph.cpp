@@ -101,6 +101,19 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 prevControl = false;
             }
             prevPos = cPos;
+            if (!m_bezier.empty())
+            {
+                if (m_bezier.back().p0.x == m_bezier.back().p1.x
+                    && m_bezier.back().p1.x == m_bezier.back().p2.x)
+                {
+                    m_bezier.back().p1.y = m_bezier.back().p0.y;
+                }
+                if (m_bezier.back().p0.y == m_bezier.back().p1.y
+                    && m_bezier.back().p1.y == m_bezier.back().p2.y)
+                {
+                    m_bezier.pop_back();
+                }
+            }
         }
         contourBegin = contourEnd[contour];
     }
@@ -185,6 +198,7 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
     {
         --extraSols;
     }
+    extraSols = 0;
 
 
     auto A = e-2*g+k;

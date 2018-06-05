@@ -41,4 +41,9 @@ void writeImage(const Image& img)
         data.at(dPos++) = img.p[i];
     }
     file.write(reinterpret_cast<const char*>(data.data()), data.size());
+
+    // Ugly (but quick) hack to get compressed output.
+    file.close();
+    int res = system(("compresspnm "+fname+' '+fname.substr(0, fname.size() - 4)+".png").c_str());
+    (void)res;
 }
