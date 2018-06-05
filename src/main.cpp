@@ -18,18 +18,18 @@ int main()
         "decorative", "special", "sans", "serif", "complex"
     };
 
-    for(auto& fontname : faces)
+    for (auto& fontname : faces)
     {
     FT_Face face;
 
     checkFTError(FT_New_Face(ftLib,
-                             //"fonts/decorative.ttf",
                              ("fonts/" + fontname + ".ttf").c_str(),
                              0,
                              &face));
 
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
 
+    std::cerr << "Beginning font '" << fontname << "'.\n";
     std::cerr << "Glyph count: " << face->num_glyphs << "\n";
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {

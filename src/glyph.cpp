@@ -179,27 +179,10 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
     bool eHit = std::abs(e-b) <= 0.f;
     bool kHit = std::abs(k-b) <= 0.f;
 
-    bool eLow = e < g || (e == g && e <= k);
-    bool kLow = k < g || (k == g && k <= e);
-
-    size_t extraSols = 0;
-
     if (eHit && kHit && e < g)
     {
-        // Todo: Find direction
         return (a <= d) - (a <= h);
     }
-
-    if (eHit && eLow && a <= d)
-    {
-        ++extraSols;
-    }
-    if (kHit && kLow && a <= h)
-    {
-        --extraSols;
-    }
-    extraSols = 0;
-
 
     auto A = e-2*g+k;
     auto B = 2*(g-e);
@@ -216,11 +199,11 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
     {
         int mul = 1;
         if (e <= k) mul = -1;
-        if (!B) return extraSols;
-        if (B > 0 && !(b > e && C > -B)) return extraSols * mul;
-        if (B < 0 && !(b < e && C < -B)) return extraSols * mul;
+        if (!B) return 0;
+        if (B > 0 && !(b > e && C > -B)) return 0;
+        if (B < 0 && !(b < e && C < -B)) return 0;
         float t = -C / (float)B;
-        return (t * (E * t + F) + G >= 0) * mul + extraSols * mul;
+        return (t * (E * t + F) + G >= 0) * mul;
     }
 
     // Note: This expression may look prone to losing precision, but note that
@@ -228,8 +211,7 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
     // is b.
     if (e*k-g*g >= b*A)
     {
-        // Todo: find direction.
-        return extraSols;
+        return 0;
     }
 
     bool minusGood = false;
@@ -271,8 +253,7 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
     auto tpX = tPlus * (E * tPlus + F) + G;
 
     auto cnt = (tmX >= 0) * minusGood
-               - (tpX >= 0) * plusGood
-               + extraSols;
+               - (tpX >= 0) * plusGood;
 
     return cnt;
 }
