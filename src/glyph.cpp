@@ -160,14 +160,14 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
-    auto e = bezier.p0y;
-    auto g = bezier.p1y;
-    auto k = bezier.p2y;
-    auto b = pos.y;
-    auto d = bezier.p0x;
-    auto f = bezier.p1x;
-    auto h = bezier.p2x;
-    auto a = pos.x;
+    const auto& e = bezier.p0y;
+    const auto& g = bezier.p1y;
+    const auto& k = bezier.p2y;
+    const auto& b = pos.y;
+    const auto& d = bezier.p0x;
+    const auto& f = bezier.p1x;
+    const auto& h = bezier.p2x;
+    const auto& a = pos.x;
 
     if (e < g && std::abs(e-b) <= 0.f && std::abs(k-b) <= 0.f)
     {
@@ -195,7 +195,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         float t = -C / (float)B;
         return (t * (E * t + F) + G >= 0) * mul;
     }
-
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
@@ -206,26 +205,16 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     bool minusGood = false;
     bool plusGood = false;
-    // Check that t > 0 for minus solution.
-    if (e>=g) minusGood = C>0;
-    else minusGood = A < 0;
 
-    // Same for plus solution.
-    if (e<g) plusGood = C<0;
-    else plusGood = A > 0;
+    /// [-,+]:
+    /// (e < g)&(k < g)  =>  [-,+] = [(A < 0)&(K < 0), (C < 0)&(A < 0)]
+    /// !(e < g)&(k < g)  =>  [-,+] = [(C > 0)&(K < 0), (A > 0)&(A < 0)]
+    /// (e < g)&!(k < g)  =>  [-,+] = [(A < 0)&(A > 0), (C < 0)&(K > 0)]
+    /// !(e < g)&!(k < g)  =>  [-,+] = [(C > 0)&(A > 0), (A > 0)&(K < 0)]
 
-    // Check that it still holds when reversing the curve (in effect testing
-    // whether t < 1).
-    if (plusGood)
-    {
-        if (k >= g) plusGood = K>0;
-        else plusGood = A < 0;
-    }
-    if (minusGood)
-    {
-        if (k < g) minusGood = K<0;
-        else minusGood = A > 0;
-    }
+    minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
+    plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
+
 
     // Just check x using floats since doing it exactly means computing a
     // complicated expression which likely needs 64-bit integers even if all
