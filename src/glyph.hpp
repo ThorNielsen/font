@@ -38,20 +38,18 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
     bool isInside(vec2 pos, size_t& beginAt) const noexcept;
-
-    void reverseCurves();
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control);
 
-    std::vector<QuadraticBezier> m_bezier;
+    std::vector<PackedBezier> m_curves;
 
     GlyphInfo m_info;
 };
 
-int intersect(vec2 pos, QuadraticBezier bezier) noexcept;
+int intersect(vec2 pos, PackedBezier bezier) noexcept;
 
 struct FontInfo
 {

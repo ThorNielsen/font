@@ -44,17 +44,17 @@ int main()
             FontInfo info(face);
             Image img = render(info, glyph, 0, info.emSize);
             img.name = "output/" + fontname + "_" + name.str() + ".pnm";
-            std::cerr << " and reverse ...";
-            glyph.reverseCurves();
-            Image rev = render(info, glyph, 0, info.emSize);
-            rev.name = "output/" + fontname + "_" + name.str() + "_r.pnm";
+            //std::cerr << " and reverse ...";
+            //glyph.reverseCurves();
+            //Image rev = render(info, glyph, 0, info.emSize);
+            //rev.name = "output/" + fontname + "_" + name.str() + "_r.pnm";
             std::cerr << " done!\n";
-            if (img != rev)
+            /*if (img != rev)
                 std::cerr << "\033[1;31mWARNING\033[0m: glyph "
-                          << name.str() << " is rendered inconsistently.\n";
-            writeImage(img);
-            if (img != rev)
-                writeImage(rev);
+                          << name.str() << " is rendered inconsistently.\n";*/
+            //writeImage(img);
+            /*if (img != rev)
+                writeImage(rev);*/
         }
         catch (const std::runtime_error& err)
         {
@@ -63,6 +63,7 @@ int main()
     }
 
     checkFTError(FT_Done_Face(face));
+    break;
 
     }
 

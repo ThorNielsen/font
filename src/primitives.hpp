@@ -33,5 +33,49 @@ struct QuadraticBezier_t
 
 using QuadraticBezier = QuadraticBezier_t<S32>;
 
+struct PackedBezier
+{
+    PackedBezier() = default;
+    template <typename T>
+    PackedBezier(vec2_t<T> p, vec2_t<T> q, vec2_t<T> r)
+        : p0x(p.x), p1x(q.x), p2x(r.x),
+          p0y(p.y), p1y(q.y), p2y(r.y)
+    {
+        miny = std::min(p0y, std::min(p1y, p2y));
+        auto A = p0y-2*p1y+p2y;
+        pc |= (p0y < p1y)      ; // e < g
+        pc |= (p2y < p1y)  << 1; // k < g
+        pc |= (p0y <= p2y) << 2; // e <= k
+        pc |= (A > 0)      << 3; // A > 0
+        pc |= (A < 0)      << 4; // A < 0
+    }
+
+    S16 p0x;
+    S16 p1x;
+    S16 p2x;
+    S16 p0y;
+    S16 p1y;
+    S16 p2y;
+    S16 miny;
+    U16 pc;
+
+    S16 minX() const
+    {
+        return std::min(p0x, std::min(p1x, p2x));
+    }
+    S16 minY() const
+    {
+        return miny;
+    }
+    S16 maxX() const
+    {
+        return std::max(p0x, std::max(p1x, p2x));
+    }
+    S16 maxY() const
+    {
+        return std::max(p0y, std::max(p1y, p2y));
+    }
+};
+
 #endif // PRIMITIVES_HPP_INCLUDED
 

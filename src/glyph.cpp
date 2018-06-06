@@ -89,49 +89,41 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 auto nextIdx = i+1-contourBegin;
                 nextIdx %= (contourEnd[contour]-contourBegin);
                 nextIdx += contourBegin;
-                m_bezier.push_back({prevPos, cPos, position[nextIdx]});
+                m_curves.push_back({prevPos, cPos, position[nextIdx]});
                 prevControl = true;
             }
             else if (!prevControl)
             {
-                m_bezier.push_back({prevPos, prevPos, cPos});
+                m_curves.push_back({prevPos, prevPos, cPos});
             }
             else
             {
                 prevControl = false;
             }
             prevPos = cPos;
-            if (!m_bezier.empty())
+            if (!m_curves.empty())
             {
-                if (m_bezier.back().p0.x == m_bezier.back().p1.x
-                    && m_bezier.back().p1.x == m_bezier.back().p2.x)
+                if (m_curves.back().p0x == m_curves.back().p1x
+                    && m_curves.back().p1x == m_curves.back().p2x)
                 {
-                    m_bezier.back().p1.y = m_bezier.back().p0.y;
+                    m_curves.back().p1y = m_curves.back().p0y;
                 }
-                if (m_bezier.back().p0.y == m_bezier.back().p1.y
-                    && m_bezier.back().p1.y == m_bezier.back().p2.y)
+                if (m_curves.back().p0y == m_curves.back().p1y
+                    && m_curves.back().p1y == m_curves.back().p2y)
                 {
-                    m_bezier.pop_back();
+                    m_curves.pop_back();
                 }
             }
         }
         contourBegin = contourEnd[contour];
     }
-
-    std::sort(m_bezier.begin(), m_bezier.end(),
-              [](const QuadraticBezier& a, const QuadraticBezier& b)
+    std::sort(m_curves.begin(), m_curves.end(),
+              [](const PackedBezier& a, const PackedBezier& b)
               {
                   if (a.minY() == b.minY()) return a.minY() < b.minY();
                   return a.minY() < b.minY();
               });
-}
 
-void Glyph::reverseCurves()
-{
-    for (auto& bezier : m_bezier)
-    {
-        std::swap(bezier.p0, bezier.p2);
-    }
 }
 
 void Glyph::dumpInfo() const
@@ -144,13 +136,14 @@ void Glyph::dumpInfo() const
     std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
               << m_info.vCursorY << ")\n";
     std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
-    std::cout << "Bezier count: " << m_bezier.size() << std::endl;
-    for (size_t i = 0; i < m_bezier.size(); ++i)
+    std::cout << "Bezier count: " << m_curves.size() << std::endl;
+    for (size_t i = 0; i < m_curves.size(); ++i)
     {
         std::cout << "Bezier #" << i << ": ";
-        std::cout << "[" << m_bezier[i].p0 << ", "
-                  << m_bezier[i].p1 << ", "
-                  << m_bezier[i].p2 << "]" << std::endl;
+        std::cout << "[(" << m_curves[i].p0x << ", " << m_curves[i].p0y << "), "
+                  <<  "(" << m_curves[i].p1x << ", " << m_curves[i].p1y << "), "
+                  <<  "(" << m_curves[i].p2x << ", " << m_curves[i].p2y << ")]"
+                  << std::endl;
 
     }
     std::cout << "\n";
@@ -165,21 +158,18 @@ void Glyph::dumpInfo() const
 // intersects two curves where the point is to the right of these, then it must
 // intersect two curves which it is to the left of in order to be considered
 // outside all outlines).
-int intersect(vec2 pos, QuadraticBezier bezier) noexcept
+int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
-    auto e = bezier.p0.y;
-    auto g = bezier.p1.y;
-    auto k = bezier.p2.y;
+    auto e = bezier.p0y;
+    auto g = bezier.p1y;
+    auto k = bezier.p2y;
     auto b = pos.y;
-    auto d = bezier.p0.x;
-    auto f = bezier.p1.x;
-    auto h = bezier.p2.x;
+    auto d = bezier.p0x;
+    auto f = bezier.p1x;
+    auto h = bezier.p2x;
     auto a = pos.x;
 
-    bool eHit = std::abs(e-b) <= 0.f;
-    bool kHit = std::abs(k-b) <= 0.f;
-
-    if (eHit && kHit && e < g)
+    if (e < g && std::abs(e-b) <= 0.f && std::abs(k-b) <= 0.f)
     {
         return (a <= d) - (a <= h);
     }
@@ -261,15 +251,15 @@ int intersect(vec2 pos, QuadraticBezier bezier) noexcept
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
     int intersections = 0;
-    while (beginAt < m_bezier.size() && m_bezier[beginAt].maxY() < pos.y)
+    while (beginAt < m_curves.size() && m_curves[beginAt].maxY() < pos.y)
     {
         ++beginAt;
     }
-    for (size_t i = beginAt; i < m_bezier.size(); ++i)
+    for (size_t i = beginAt; i < m_curves.size(); ++i)
     {
-        if (m_bezier[i].minY() > pos.y) return intersections;
-        if (m_bezier[i].maxX() < pos.x) continue;
-        int ic = intersect(pos, m_bezier[i]);
+        if (m_curves[i].minY() > pos.y) return intersections;
+        if (m_curves[i].maxX() < pos.x) continue;
+        int ic = intersect(pos, m_curves[i]);
         intersections += ic;
     }
     return intersections;

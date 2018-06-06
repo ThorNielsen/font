@@ -10,8 +10,8 @@ T sign(T val)
     return T(0);
 }
 
-template <U8 BitPos>
-U32 bit(U8 val)
+template <U8 BitPos, typename T>
+U32 bit(T val)
 {
     return (val>>BitPos)&1;
 }
