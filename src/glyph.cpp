@@ -115,8 +115,8 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                     m_curves.back().p1x = m_curves.back().p2x;
                     m_curves.back().p1y = m_curves.back().p2y;
                 }
-                if (m_curves.back().p2x == m_curves.back().p2x
-                    && m_curves.back().p2y == m_curves.back().p2y
+                if (m_curves.back().p2x == m_curves.back().p1x
+                    && m_curves.back().p2y == m_curves.back().p1y
                     && m_curves.back().p1y < m_curves.back().p0y)
                 {
                     m_curves.back().p1x = m_curves.back().p0x;
@@ -236,16 +236,16 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
     plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
 
-    if (e <= g && std::abs(e-b) <= 0.f)
+    if (e < g && std::abs(e-b) <= 0.f)
     {
         /*std::cerr << "Hit point 'e' which says ";
         if (B < 0) std::cerr << "minus";
         else std::cerr << "plus";
         std::cerr << "!\n";*/
         if (B < 0) minusGood = true;
-        else plusGood = true;
+        else if (B > 0) plusGood = true;
     }
-    if (k <= g && std::abs(k-b) <= 0.f)
+    if (k < g && std::abs(k-b) <= 0.f)
     {
         /*std::cerr << "Hit point 'k' which says ";
         if (B < 0) std::cerr << "minus";
