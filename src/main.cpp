@@ -33,6 +33,8 @@ int main()
     std::cerr << "Glyph count: " << face->num_glyphs << "\n";
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
+        //if (idx != 33 && idx != 34) continue;
+        if (idx != 32) continue;
         std::stringstream name;
         name << idx;
         std::cerr << "Rendering glyph #" << name.str() << "...";
@@ -52,7 +54,7 @@ int main()
             /*if (img != rev)
                 std::cerr << "\033[1;31mWARNING\033[0m: glyph "
                           << name.str() << " is rendered inconsistently.\n";*/
-            //writeImage(img);
+            writeImage(img);
             /*if (img != rev)
                 writeImage(rev);*/
         }

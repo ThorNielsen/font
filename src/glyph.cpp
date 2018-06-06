@@ -108,6 +108,20 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 {
                     m_curves.back().p1y = m_curves.back().p0y;
                 }
+                if (m_curves.back().p0x == m_curves.back().p1x
+                    && m_curves.back().p0y == m_curves.back().p1y
+                    && m_curves.back().p1y < m_curves.back().p2y)
+                {
+                    m_curves.back().p1x = m_curves.back().p2x;
+                    m_curves.back().p1y = m_curves.back().p2y;
+                }
+                if (m_curves.back().p2x == m_curves.back().p2x
+                    && m_curves.back().p2y == m_curves.back().p2y
+                    && m_curves.back().p1y < m_curves.back().p0y)
+                {
+                    m_curves.back().p1x = m_curves.back().p0x;
+                    m_curves.back().p1y = m_curves.back().p0y;
+                }
                 if (m_curves.back().p0y == m_curves.back().p1y
                     && m_curves.back().p1y == m_curves.back().p2y)
                 {
@@ -160,6 +174,12 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
+    /*
+    std::cerr << "NOTE: Curve has lowest point ";
+    if (bezier.minY() == bezier.p0y) std::cerr << bezier.p0x << ", " << bezier.p0y << "\n";
+    else if (bezier.minY() == bezier.p1y) std::cerr << bezier.p1x << ", " << bezier.p1y << "\n";
+    else if (bezier.minY() == bezier.p2y) std::cerr << bezier.p2x << ", " << bezier.p2y << "\n";
+    //*/
     const auto& e = bezier.p0y;
     const auto& g = bezier.p1y;
     const auto& k = bezier.p2y;
@@ -169,6 +189,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& h = bezier.p2x;
     const auto& a = pos.x;
 
+    // Todo: get rid of this.
     if (e < g && std::abs(e-b) <= 0.f && std::abs(k-b) <= 0.f)
     {
         return (a <= d) - (a <= h);
@@ -215,6 +236,30 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
     plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
 
+    if (e <= g && std::abs(e-b) <= 0.f)
+    {
+        /*std::cerr << "Hit point 'e' which says ";
+        if (B < 0) std::cerr << "minus";
+        else std::cerr << "plus";
+        std::cerr << "!\n";*/
+        if (B < 0) minusGood = true;
+        else plusGood = true;
+    }
+    if (k <= g && std::abs(k-b) <= 0.f)
+    {
+        /*std::cerr << "Hit point 'k' which says ";
+        if (B < 0) std::cerr << "minus";
+        else std::cerr << "plus";
+        std::cerr << "!\n";*/
+        if (B < 0) minusGood = true;
+        else if (B > 0) plusGood = true;
+        else
+        {
+            if (A < 0) minusGood = true;
+            else plusGood = true;
+        }
+    }
+
 
     // Just check x using floats since doing it exactly means computing a
     // complicated expression which likely needs 64-bit integers even if all
@@ -231,14 +276,26 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
+/*
+    std::cerr << "\033[1;35m-t: " << tMinus << "\n";
+    std::cerr << "\033[1;35m+t: " << tPlus << "\n\033[0m";
+    std::cerr << "\033[1;32mx[-t]? " << tmX << "\n";
+    std::cerr << "\033[1;32mx[+t]? " << tpX << "\n\033[0m";
+    //*/
+
     auto cnt = (tmX >= 0) * minusGood
                - (tpX >= 0) * plusGood;
 
     return cnt;
 }
 
+#define SHOWG LYPHDEBUG
+
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
+#ifdef SHOWGLYPHDEBUG
+    std::cerr << "\n\nAt " << pos << " we get:\n";
+#endif // SHOWGLYPHDEBUG
     int intersections = 0;
     while (beginAt < m_curves.size() && m_curves[beginAt].maxY() < pos.y)
     {
@@ -246,11 +303,21 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     }
     for (size_t i = beginAt; i < m_curves.size(); ++i)
     {
+#ifdef SHOWGLYPHDEBUG
+        if (m_curves[i].minY() > pos.y)
+    std::cerr << "\033[1;33;41mRetrunning " << intersections << "\033[0m\n\n";
+#endif // SHOWGLYPHDEBUG
         if (m_curves[i].minY() > pos.y) return intersections;
         if (m_curves[i].maxX() < pos.x) continue;
         int ic = intersect(pos, m_curves[i]);
+#ifdef SHOWGLYPHDEBUG
+        std::cerr << "\033[31mAdding " << ic << " to intersections [curr " << intersections << "]\033[0m\n\n";
+#endif // SHOWGLYPHDEBUG
         intersections += ic;
     }
+#ifdef SHOWGLYPHDEBUG
+    std::cerr << "Retrunning " << intersections << "\n\n";
+#endif // SHOWGLYPHDEBUG
     return intersections;
 
 }
@@ -297,14 +364,19 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
     size_t beginAt = 0;
     for (int y = pixelHeight-1; y >= 0; --y)
     {
+        //if (y != 120) continue;
         for (int x = 0; x < pixelWidth; ++x)
         {
+            //if (x < 250 || x > 300) continue;
+            //if (x > pixelWidth / 10) continue;
+            //if (x&0x7) continue;
             vec2 glyphPos;
-            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth-1);
-            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight-1);
+            glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
+            glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
             auto inside = glyph.isInside(glyphPos, beginAt);
             img.setPixel(x, y, inside ? 0xffffff : 0);
         }
+        ///if (y == pixelHeight-1) break;
     }
     return img;
 }
