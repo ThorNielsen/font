@@ -174,12 +174,17 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
-    /*
+    /*if (std::abs(pos.y+45) <= 0.f) return 0;
+    if (std::abs(pos.y+45) <= 0.f){
     std::cerr << "NOTE: Curve has lowest point ";
     if (bezier.minY() == bezier.p0y) std::cerr << bezier.p0x << ", " << bezier.p0y << "\n";
     else if (bezier.minY() == bezier.p1y) std::cerr << bezier.p1x << ", " << bezier.p1y << "\n";
     else if (bezier.minY() == bezier.p2y) std::cerr << bezier.p2x << ", " << bezier.p2y << "\n";
-    //*/
+    std::cerr << "Full curve: ";
+    std::cerr << "(" << bezier.p0x << ", " << bezier.p0y << "), ";
+    std::cerr << "(" << bezier.p1x << ", " << bezier.p1y << "), ";
+    std::cerr << "(" << bezier.p2x << ", " << bezier.p2y << ")\n";
+    }//*/
     const auto& e = bezier.p0y;
     const auto& g = bezier.p1y;
     const auto& k = bezier.p2y;
@@ -188,12 +193,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& f = bezier.p1x;
     const auto& h = bezier.p2x;
     const auto& a = pos.x;
-
-    // Todo: get rid of this.
-    if (e < g && std::abs(e-b) <= 0.f && std::abs(k-b) <= 0.f)
-    {
-        return (a <= d) - (a <= h);
-    }
 
     auto A = e-2*g+k;
     auto B = 2*(g-e);
@@ -208,6 +207,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     if (A == 0)
     {
+        std::cerr << "See, a problem: " << pos.y << "\n";
         int mul = 1;
         if (e <= k) mul = -1;
         if (!B) return 0;
@@ -219,6 +219,9 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
+    /*bool yMonotone = (e <= g && g <= k) || (k <= g && g <= e);
+    if ((!yMonotone && e*k-g*g > b*A) ||
+        (yMonotone && (b >= std::max(e,k) || b < std::min(e, k))))//*/
     if (e*k-g*g >= b*A)
     {
         return 0;
@@ -236,25 +239,44 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
     plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
 
-    if (e < g && std::abs(e-b) <= 0.f)
+
+
+    bool say = false;
+    if (e <= g && std::abs(e-b) <= 0.f)
     {
-        /*std::cerr << "Hit point 'e' which says ";
-        if (B < 0) std::cerr << "minus";
-        else std::cerr << "plus";
-        std::cerr << "!\n";*/
+        /*if (std::abs(pos.y+45) <= 0.f)
+        {
+            std::cerr << "Hit point 'e' which says ";
+            if (B < 0) std::cerr << "minus";
+            else if (B > 0) std::cerr << "plus";
+            else std::cerr << "zero";
+            std::cerr << "!\n";
+        }*/
         if (B < 0) minusGood = true;
         else if (B > 0) plusGood = true;
     }
-    if (k < g && std::abs(k-b) <= 0.f)
+    if (k <= g && std::abs(k-b) <= 0.f)
     {
-        /*std::cerr << "Hit point 'k' which says ";
-        if (B < 0) std::cerr << "minus";
-        else std::cerr << "plus";
-        std::cerr << "!\n";*/
-        if (B < 0) minusGood = true;
-        else if (B > 0) plusGood = true;
+        // Have to find out whether + or - solves the following:
+        // 2A = -B +- sqrt(B^2-4AC)  <=>
+        // 2A+B = +- sqrt(B^2-4AC)
+        // If lhs is negative then minus solution else plus solution.
+        // lhs is negative iff 2A+B < 0 iff 2A/B > 0 iff 2AB > 0 iff AB > 0
+        /*if (std::abs(pos.y+45) <= 0.f)
+        {
+            say = true;
+            std::cerr << "Hit point 'k' which says ";
+            if (2*A+B < 0) std::cerr << "minus";
+            else if (2*A-B > 0) std::cerr << "plus";
+            else std::cerr << "zero";
+            std::cerr << "!\n";
+        }*/
+        if (2*A+B < 0) minusGood = true;
+        else if (2*A-B > 0) plusGood = true;
         else
         {
+            // Our situation is:
+            // 1 = +- sqrt(-4AC)/2A
             if (A < 0) minusGood = true;
             else plusGood = true;
         }
@@ -276,11 +298,13 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
-/*
-    std::cerr << "\033[1;35m-t: " << tMinus << "\n";
-    std::cerr << "\033[1;35m+t: " << tPlus << "\n\033[0m";
-    std::cerr << "\033[1;32mx[-t]? " << tmX << "\n";
-    std::cerr << "\033[1;32mx[+t]? " << tpX << "\n\033[0m";
+    if (say && std::abs(pos.y+45) <= 0.f)
+    {
+        std::cerr << "\033[1;35m-t: " << tMinus << "\n";
+        std::cerr << "\033[1;35m+t: " << tPlus << "\n\033[0m";
+        std::cerr << "\033[1;32mx[-t]? " << tmX << "\n";
+        std::cerr << "\033[1;32mx[+t]? " << tpX << "\n\033[0m";
+    }
     //*/
 
     auto cnt = (tmX >= 0) * minusGood
@@ -289,7 +313,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     return cnt;
 }
 
-#define SHOWG LYPHDEBUG
+#define SHOW GLYPHDEBUG
 
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
@@ -367,7 +391,8 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
         //if (y != 120) continue;
         for (int x = 0; x < pixelWidth; ++x)
         {
-            //if (x < 250 || x > 300) continue;
+            //if (x > 50) continue;
+            //if (y != 638) continue;
             //if (x > pixelWidth / 10) continue;
             //if (x&0x7) continue;
             vec2 glyphPos;
