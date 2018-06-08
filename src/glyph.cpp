@@ -174,19 +174,10 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
-    const auto& e = bezier.p0y;
-    const auto& g = bezier.p1y;
-    const auto& k = bezier.p2y;
-    const auto& b = pos.y;
-    const auto& d = bezier.p0x;
-    const auto& f = bezier.p1x;
-    const auto& h = bezier.p2x;
-    const auto& a = pos.x;
-
-    auto B = g-e;
-    auto A = B+g-k;
-    auto C = e-b;
-    auto K = k-b;
+    auto B = bezier.p1y-bezier.p0y;
+    auto A = B+bezier.p1y-bezier.p2y;
+    auto C = bezier.p0y-pos.y;
+    auto K = bezier.p2y-pos.y;
 
     bool cgz = C>0;
     bool kgz = K>0;
@@ -194,15 +185,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     bool kez = std::abs(K) <= 0.f;
     auto lookup = ((bezier.lookup>>(2*cgz+4*kgz))
                    | (bezier.lookup>>(8+2*cez+4*kez)))&3;
-
-    // Just check x using floats since doing it exactly means computing a
-    // complicated expression which likely needs 64-bit integers even if all
-    // absolute values of the coordinates are less than 2^12. Also, precision is
-    // probably not an issue since we only use this to get the x-coordinate of
-    // our intersections relative to the ray origin. Yes, it might mean that an
-    // intersection very close to the ray origin may be missed (or a non-
-    // intersection is counted) but since it is very close to the ray origin, it
-    // probably isn't visible.
 
     float tMinus, tPlus;
     if (A == 0)
@@ -217,9 +199,9 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
-    auto E = d-2*f+h;
-    auto F = 2*(f-d);
-    auto G = d-a;
+    auto E = bezier.p0x-2*bezier.p1x+bezier.p2x;
+    auto F = 2*(bezier.p1x-bezier.p0x);
+    auto G = bezier.p0x-pos.x;
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 

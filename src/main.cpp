@@ -129,8 +129,6 @@ int main()
         writeChecksums(fontname, checksums);
     }
 
-    break;
-
     }
 
 
