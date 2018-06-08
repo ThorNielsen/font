@@ -183,36 +183,22 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& h = bezier.p2x;
     const auto& a = pos.x;
 
-    bool eHit = std::abs(e-b) <= 0.f;
-    bool kHit = std::abs(k-b) <= 0.f;
 
     auto A = e-2*g+k;
     auto B = 2*(g-e);
     auto C = e-b;
     auto K = k-b;
 
+    bool zeroC = std::abs(C) <= 0.f;
+    bool zeroK = std::abs(K) <= 0.f;
+
+    auto M = g-k;
+
 
     auto E = d-2*f+h;
     auto F = 2*(f-d);
     auto G = d-a;
 
-    if (A == 0)
-    {
-        if (eHit && e < k)
-        {
-            return -(a <= d);
-        }
-        if (kHit && e > k)
-        {
-            return (a <= h);
-        }
-
-        int mul = 1;
-        if (e <= k) mul = -1;
-
-        float t = -C / (float)B;
-        return (t * (E * t + F) + G >= 0) * mul;
-    }
 
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
@@ -223,56 +209,40 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         return 0;
     }
 
-    bool minusGood = false;
-    bool plusGood = false;
+    bool minusGood = e > k;
+    bool plusGood = e <= k;
 
-    /// [-,+]:
-    /// (e < g)&(k < g)  =>  [-,+] = [(A < 0)&(K < 0), (C < 0)&(A < 0)]
-    /// !(e < g)&(k < g)  =>  [-,+] = [(C > 0)&(K < 0), (A > 0)&(A < 0)]
-    /// (e < g)&!(k < g)  =>  [-,+] = [(A < 0)&(A > 0), (C < 0)&(K > 0)]
-    /// !(e < g)&!(k < g)  =>  [-,+] = [(C > 0)&(A > 0), (A > 0)&(K < 0)]
+    if (A != 0)
+    {
+        minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
+        plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
+    }
 
-    minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
-    plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
-
-
-    if (e <= g && eHit)
+    if (B >= 0 && zeroC)
     {
         // Prevent problems at tangents.
-        if (e == g && e < k)
+        if (!B)
         {
             minusGood = false;
             plusGood = false;
-        }
-
-        if (B < 0) minusGood = true;
-        else if (B > 0) plusGood = true;
-        else
-        {
-            // Giver minusSol eller plusSol t=0?
-            // 0 = +-sqrt(-4AC)/2A
             if (k > e) plusGood = true;
             else minusGood = true;
         }
+
+        if (B > 0) plusGood = true;
     }
-    if (k <= g && kHit)
+    if (M >= 0 && zeroK)
     {
         // Prevent problems at tangents.
-        if (k == g && k < e)
+        if (!M)
         {
             minusGood = false;
             plusGood = false;
-        }
-
-        if (2*A+B < 0) minusGood = true;
-        else if (2*A+B > 0) plusGood = true;
-        else
-        {
-            // Our situation is:
-            // 1 = +- sqrt(-4AC)/2A
             if (e > k) minusGood = true;
             else plusGood = true;
         }
+
+        if (M > 0) minusGood = true;
     }
 
     // Just check x using floats since doing it exactly means computing a
@@ -284,8 +254,20 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     // intersection is counted) but since it is very close to the ray origin, it
     // probably isn't visible.
 
-    float tMinus = (-B - std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
-    float tPlus  = (-B + std::sqrt((float)(B*B-4*A*C))) / (float)(2*A);
+    float tMinus, tPlus;
+    if (A == 0)
+    {
+        tMinus = -C / (float)B;
+        tPlus = tMinus;
+    }
+    else
+    {
+        float comp1 = std::sqrt((float)(B*B-4*A*C));
+        float comp2 = (float)(2*A);
+        tMinus = (-B - comp1)/comp2; // Division for accuracy to enable
+        tPlus  = (-B + comp1)/comp2; // comparison with checksums. Later, change
+                                     // comp2 to 1/comp2 and multiply instead.
+    }
 
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
