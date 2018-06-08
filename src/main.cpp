@@ -34,8 +34,7 @@ int main()
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
         //if (idx != 33 && idx != 34) continue;
-        //if (idx != 32) continue;
-        ///if (idx != 57) continue; // SANS
+        //if (idx != 20) continue;
         std::stringstream name;
         name << idx;
         std::cerr << "Rendering glyph #" << name.str() << "...";

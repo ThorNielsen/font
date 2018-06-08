@@ -163,7 +163,7 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-#define CLINE 43000
+#define CLINE 3400
 
 /// NOTE: Passing through curves down should give 1, up should give -1. That is,
 /// If we have:
@@ -233,9 +233,18 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     if (A == 0)
     {
+        if (std::abs(e-b) <= 0.f && e < k)
+        {
+            return -(a <= d);
+        }
+        if (std::abs(k-b) <= 0.f && e > k)
+        {
+            return (a <= h);
+        }
         //std::cerr << "See, a problem: " << pos.y << "\n";
         int mul = 1;
         if (e <= k) mul = -1;
+
         if (!B) return 0;
         if (B > 0 && !(b > e && C > -B)) return 0;
         if (B < 0 && !(b < e && C < -B)) return 0;
