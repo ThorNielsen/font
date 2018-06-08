@@ -27,6 +27,7 @@ void writeImage(const Image& img)
     {
         throw std::runtime_error("Could not open " + fname + " for writing.");
     }
+
     writePnmHeader(file, img.width, img.height);
     if (img.p.size() != 4*img.width*img.height)
     {

@@ -1,4 +1,5 @@
 #include "common.hpp"
+#include "crc.hpp"
 #include "freetype.hpp"
 #include "glyph.hpp"
 #include "image.hpp"
@@ -6,8 +7,36 @@
 #include "timer.hpp"
 
 #include <iostream>
+#include <fstream>
+#include <map>
 #include <sstream>
 #include <vector>
+
+std::map<int, U32> readChecksums(std::string fontname)
+{
+    std::map<int, U32> checksums;
+    std::ifstream input((fontname + ".crc32").c_str());
+    if (!input.is_open()) return checksums;
+    while (input.good())
+    {
+        int glyph;
+        U32 sum;
+        input >> glyph >> sum;
+        checksums[glyph] = sum;
+    }
+    return checksums;
+}
+
+bool writeChecksums(std::string fontname, std::map<int, U32> checksums)
+{
+    std::ofstream output((fontname + ".crc32").c_str());
+    if (!output.is_open()) return false;
+    for (auto& sum : checksums)
+    {
+        output << sum.first << ' ' << sum.second << '\n';
+    }
+    return true;
+}
 
 int main()
 {
@@ -20,18 +49,20 @@ int main()
     };
 
 
+    bool validate = true;
+    bool writeImages = false;
+    bool updateChecksums = false;
+
     for (auto& fontname : faces)
     {
     FT_Face face;
-
     checkFTError(FT_New_Face(ftLib,
                              ("fonts/" + fontname + ".ttf").c_str(),
                              0,
                              &face));
-
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
 
-    std::vector<Image> images;
+    std::map<int, U32> checksums = readChecksums(fontname);
 
     std::cerr << "Rendering font '" << fontname << "' [";
     std::cerr << face->num_glyphs << " glyphs].\n";
@@ -47,12 +78,41 @@ int main()
         FT_GlyphSlot slot = face->glyph;
         try
         {
+            U32 checksum;
             Glyph glyph(slot->outline, slot->metrics);
             FontInfo info(face);
             Image img = render(info, glyph, 0, info.emSize);
             img.name = "output/" + fontname + "_" + name.str() + ".pnm";
-            images.emplace_back(std::move(img));
-            std::cerr << " done!\n";
+
+            if (writeImages)
+            {
+                writeImage(img);
+            }
+
+            if (validate)
+            {
+                checksum = crc(img.p.data(), img.p.size());
+                if (checksums.find(idx) == checksums.end())
+                {
+                    std::cerr << " done, but unvalidated!\n";
+                }
+                else
+                {
+                    std::cerr << ((checksum == checksums[idx])
+                                  ? " good.\n"
+                                  : " \033[1;31mBAD!\033[0m\n");
+                }
+            }
+            else
+            {
+                std::cerr << " done!\n";
+            }
+            if (updateChecksums)
+            {
+                if (!validate) checksum = crc(img.p.data(), img.p.size());
+                checksums[idx] = checksum;
+            }
+
         }
         catch (const std::runtime_error& err)
         {
@@ -60,16 +120,15 @@ int main()
         }
     }
     timer.stop();
-    std::cerr << "Total render time: " << timer.duration() << "\n";
-
-    std::cerr << "Writing images...";
-    for (auto& image : images)
-    {
-        writeImage(image);
-    }
-    std::cerr << " DONE!\n";
+    std::cerr << "Total time: " << timer.duration() << "\n";
 
     checkFTError(FT_Done_Face(face));
+
+    if (updateChecksums)
+    {
+        writeChecksums(fontname, checksums);
+    }
+
     break;
 
     }

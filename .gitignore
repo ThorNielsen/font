@@ -9,3 +9,4 @@
 ValgrindOut.xml
 *.pnm
 *.ttf
+*.crc32
