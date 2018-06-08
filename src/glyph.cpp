@@ -184,12 +184,12 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& a = pos.x;
 
 
-    auto A = e-2*g+k;
     auto B = g-e;
+    auto A = B+g-k;
     auto C = e-b;
     auto K = k-b;
 
-    auto M = g-k;
+    auto M = A-B;
 
 
     auto E = d-2*f+h;
@@ -201,18 +201,18 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
     bool yMonotone = (B >= 0 && M <= 0) || (B <= 0 && M >= 0);
-    if (!yMonotone && e*k-g*g > b*A)
+    if (!yMonotone && g*g-e*k < b*A)
     {
         return 0;
     }
 
-    bool minusGood = e > k;
+    bool minusGood = M > B;
     bool plusGood = !minusGood;
 
     if (A != 0)
     {
-        minusGood = (B <= 0 ? C > 0 : A < 0) && (M > 0 ? K < 0 : A > 0);
-        plusGood =  (B > 0 ? C < 0 : A > 0) && (M <= 0 ? K > 0 : A < 0);
+        minusGood = (B <= 0 ? C > 0 : A > 0) && (M > 0 ? K <= 0 : A <= 0);
+        plusGood =  (B > 0 ? C <= 0 : A <= 0) && (M <= 0 ? K > 0 : A > 0);
     }
 
     if (B > 0 && std::abs(C) <= 0.f)
@@ -241,10 +241,10 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     }
     else
     {
-        float comp1 = std::sqrt((float)(B*B-A*C));
+        float comp1 = std::sqrt((float)(B*B+A*C));
         float comp2 = (float)(A);
-        tMinus = (-B - comp1)/comp2; // Division for accuracy to enable
-        tPlus  = (-B + comp1)/comp2; // comparison with checksums. Later, change
+        tMinus = (B + comp1)/comp2; // Division for accuracy to enable
+        tPlus  = (B - comp1)/comp2; // comparison with checksums. Later, change
                                      // comp2 to 1/comp2 and multiply instead.
     }
 
