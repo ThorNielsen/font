@@ -29,12 +29,10 @@ int main()
 
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
 
-    std::cerr << "Beginning font '" << fontname << "'.\n";
-    std::cerr << "Glyph count: " << face->num_glyphs << "\n";
+    std::cerr << "Rendering font '" << fontname << "' [";
+    std::cerr << face->num_glyphs << " glyphs].\n";
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
-        //if (idx != 33 && idx != 34) continue;
-        //if (idx != 20) continue;
         std::stringstream name;
         name << idx;
         std::cerr << "Rendering glyph #" << name.str() << "...";
@@ -46,17 +44,8 @@ int main()
             FontInfo info(face);
             Image img = render(info, glyph, 0, info.emSize);
             img.name = "output/" + fontname + "_" + name.str() + ".pnm";
-            //std::cerr << " and reverse ...";
-            //glyph.reverseCurves();
-            //Image rev = render(info, glyph, 0, info.emSize);
-            //rev.name = "output/" + fontname + "_" + name.str() + "_r.pnm";
             std::cerr << " done!\n";
-            /*if (img != rev)
-                std::cerr << "\033[1;31mWARNING\033[0m: glyph "
-                          << name.str() << " is rendered inconsistently.\n";*/
             writeImage(img);
-            /*if (img != rev)
-                writeImage(rev);*/
         }
         catch (const std::runtime_error& err)
         {

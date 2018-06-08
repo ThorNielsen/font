@@ -163,20 +163,6 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-#define CLINE 3400
-
-/// NOTE: Passing through curves down should give 1, up should give -1. That is,
-/// If we have:
-///
-///        ^
-///       /
-///      /
-/// ----/-------->
-///    /
-///   o
-///
-/// Then the function should return -1.
-
 // Note that to handle self-intersecting glyphs (for example where two different
 // outlines intersect (which sometimes happens for e.g. ffl-ligatures)) this
 // computes not how many intersections there are but instead a number signifying
@@ -188,17 +174,6 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
-    //if (std::abs(pos.y-CLINE) <= 0.f) return 0;
-    if (std::abs(pos.y-CLINE) <= 0.f){
-    //std::cerr << "NOTE: Curve has lowest point ";
-    //if (bezier.minY() == bezier.p0y) std::cerr << bezier.p0x << ", " << bezier.p0y << "\n";
-    //else if (bezier.minY() == bezier.p1y) std::cerr << bezier.p1x << ", " << bezier.p1y << "\n";
-    //else if (bezier.minY() == bezier.p2y) std::cerr << bezier.p2x << ", " << bezier.p2y << "\n";
-    std::cerr << "Full curve: ";
-    std::cerr << "(" << bezier.p0x << ", " << bezier.p0y << "), ";
-    std::cerr << "(" << bezier.p1x << ", " << bezier.p1y << "), ";
-    std::cerr << "(" << bezier.p2x << ", " << bezier.p2y << ")\n";
-    }//*/
     const auto& e = bezier.p0y;
     const auto& g = bezier.p1y;
     const auto& k = bezier.p2y;
@@ -218,19 +193,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto F = 2*(f-d);
     auto G = d-a;
 
-/*
-    if (std::abs(pos.y-43) <= 0.f && bezier.p1x == 438 && bezier.p1y == 43)
-    {
-#define SAY(x) std::cerr << #x ": " << (x) << "\n"
-        std::cerr << "I am at the problem now.\n";
-        SAY(pos);
-        SAY(e <= g);
-        SAY(k <= g);
-        SAY(e-b);
-        SAY(k-b);
-        std::cin.get();
-    }//*/
-
     if (A == 0)
     {
         if (std::abs(e-b) <= 0.f && e < k)
@@ -241,7 +203,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         {
             return (a <= h);
         }
-        //std::cerr << "See, a problem: " << pos.y << "\n";
+
         int mul = 1;
         if (e <= k) mul = -1;
 
@@ -251,16 +213,14 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         float t = -C / (float)B;
         return (t * (E * t + F) + G >= 0) * mul;
     }
+
     // Note: This expression may look prone to losing precision, but note that
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
     bool yMonotone = (e <= g && g <= k) || (k <= g && g <= e);
     if ((!yMonotone && e*k-g*g > b*A) ||
-        (yMonotone && (b >= std::max(e,k) || b < std::min(e, k))))/*/
-    if (e*k-g*g >= b*A) //*/
+        (yMonotone && (b >= std::max(e,k) || b < std::min(e, k))))
     {
-        //if (std::abs(pos.y-43) <= 0.f)
-        //std::cerr << "\033[1;36mForcing a zero return.\033[0m\n";
         return 0;
     }
 
@@ -275,28 +235,17 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
     plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
-    /*if (std::abs(pos.y-43) <= 0.f && bezier.p1x == 438 && bezier.p1y == 43)
-        std::cerr << "Follow-up: (-, +) goes from " << minusGood << plusGood;*/
 
 
-    bool say = false;
     if (e <= g && std::abs(e-b) <= 0.f)
     {
         // Prevent problems at tangents.
         if (e == g && e < k)
         {
-            //std::cerr << "B: " << B << "\n";
             minusGood = false;
             plusGood = false;
         }
-        if (std::abs(pos.y-CLINE) <= 0.f)
-        {
-            std::cerr << "Hit point 'e' which says ";
-            if (B < 0) std::cerr << "minus";
-            else if (B > 0) std::cerr << "plus";
-            else std::cerr << "zero";
-            std::cerr << "!\n";
-        }//*/
+
         if (B < 0) minusGood = true;
         else if (B > 0) plusGood = true;
         else
@@ -315,20 +264,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
             minusGood = false;
             plusGood = false;
         }
-        // Have to find out whether + or - solves the following:
-        // 2A = -B +- sqrt(B^2-4AC)  <=>
-        // 2A+B = +- sqrt(B^2-4AC)
-        // If lhs is negative then minus solution else plus solution.
-        // lhs is negative iff 2A+B < 0 iff 2A/B > 0 iff 2AB > 0 iff AB > 0
-        if (std::abs(pos.y-CLINE) <= 0.f)
-        {
-            //say = true;
-            std::cerr << "Hit point 'k' which says ";
-            if (2*A+B < 0) std::cerr << "minus";
-            else if (2*A+B > 0) std::cerr << "plus";
-            else std::cerr << "zero";
-            std::cerr << "!\n";
-        }//*/
+
         if (2*A+B < 0) minusGood = true;
         else if (2*A+B > 0) plusGood = true;
         else
@@ -339,13 +275,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
             else plusGood = true;
         }
     }
-/*
-    if (std::abs(pos.y-43) <= 0.f && bezier.p1x == 438 && bezier.p1y == 43)
-    {
-        std::cerr << " to " << minusGood << plusGood;
-        std::cin.get();
-        say = true;
-    }*/
 
     // Just check x using floats since doing it exactly means computing a
     // complicated expression which likely needs 64-bit integers even if all
@@ -362,30 +291,14 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
-    if (say)
-    {
-        std::cerr << "\033[1;35m-t: " << tMinus << "\n";
-        std::cerr << "\033[1;35m+t: " << tPlus << "\n\033[0m";
-        std::cerr << "\033[1;32mx[-t]? " << tmX << "\n";
-        std::cerr << "\033[1;32mx[+t]? " << tpX << "\n\033[0m";
-    }
-    //*/
-
     auto cnt = (tmX >= 0) * minusGood
                - (tpX >= 0) * plusGood;
 
     return cnt;
 }
 
-#define GLYPHDEBUG
-#define COND if (std::abs(pos.y - CLINE) <= 0.f)
-
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
-#ifdef GLYPHDEBUG
-    COND
-    std::cerr << "\n\nAt " << pos << " we get:\n";
-#endif // GLYPHDEBUG
     int intersections = 0;
     while (beginAt < m_curves.size() && m_curves[beginAt].maxY() < pos.y)
     {
@@ -393,30 +306,12 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     }
     for (size_t i = beginAt; i < m_curves.size(); ++i)
     {
-#ifdef GLYPHDEBUG
-    COND{
-        if (m_curves[i].minY() > pos.y)
-    std::cerr << "\033[1;33;41mRetrunning " << intersections << "\033[0m\n\n";}
-#endif // GLYPHDEBUG
         if (m_curves[i].minY() > pos.y) return intersections;
         if (m_curves[i].maxY() < pos.y) continue;
         if (m_curves[i].maxX() < pos.x) continue;
 
-#ifdef GLYPHDEBUG
-        //if (m_curves[i].minX() >= 457) continue;
-#endif // GLYPHDEBUG
-
-        int ic = intersect(pos, m_curves[i]);
-#ifdef GLYPHDEBUG
-    COND
-        std::cerr << "\033[31mAdding " << ic << " to intersections [curr " << intersections << "]\033[0m\n\n";
-#endif // GLYPHDEBUG
-        intersections += ic;
+        intersections += intersect(pos, m_curves[i]);
     }
-#ifdef GLYPHDEBUG
-    COND
-    std::cerr << "Retrunning " << intersections << "\n\n";
-#endif // GLYPHDEBUG
     return intersections;
 
 }
@@ -463,20 +358,14 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
     size_t beginAt = 0;
     for (int y = pixelHeight-1; y >= 0; --y)
     {
-        //if (y != 120) continue;
         for (int x = 0; x < pixelWidth; ++x)
         {
-            //if (x > 50) continue;
-            //if (y != 638) continue;
-            //if (x > pixelWidth / 10) continue;
-            //if (x&0x7) continue;
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
             auto inside = glyph.isInside(glyphPos, beginAt);
             img.setPixel(x, y, inside ? 0xffffff : 0);
         }
-        ///if (y == pixelHeight-1) break;
     }
     return img;
 }
