@@ -1,12 +1,13 @@
-#include "image.hpp"
-#include "freetype.hpp"
 #include "common.hpp"
+#include "freetype.hpp"
 #include "glyph.hpp"
+#include "image.hpp"
+#include "primitives.hpp"
+#include "timer.hpp"
 
 #include <iostream>
 #include <sstream>
 #include <vector>
-#include "primitives.hpp"
 
 int main()
 {
@@ -17,6 +18,7 @@ int main()
     {
         "decorative", "special", "sans", "serif", "complex"
     };
+
 
     for (auto& fontname : faces)
     {
@@ -29,8 +31,13 @@ int main()
 
     checkFTError(FT_Set_Pixel_Sizes(face, 0, 64));
 
+    std::vector<Image> images;
+
     std::cerr << "Rendering font '" << fontname << "' [";
     std::cerr << face->num_glyphs << " glyphs].\n";
+
+    Timer timer;
+    timer.start();
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
         std::stringstream name;
@@ -44,19 +51,29 @@ int main()
             FontInfo info(face);
             Image img = render(info, glyph, 0, info.emSize);
             img.name = "output/" + fontname + "_" + name.str() + ".pnm";
+            images.emplace_back(std::move(img));
             std::cerr << " done!\n";
-            writeImage(img);
         }
         catch (const std::runtime_error& err)
         {
             std::cerr << " FAILED: " << err.what() << "\n";
         }
     }
+    timer.stop();
+    std::cerr << "Total render time: " << timer.duration() << "\n";
+
+    std::cerr << "Writing images...";
+    for (auto& image : images)
+    {
+        writeImage(image);
+    }
+    std::cerr << " DONE!\n";
 
     checkFTError(FT_Done_Face(face));
     break;
 
     }
+
 
     checkFTError(FT_Done_FreeType(ftLib));
 }

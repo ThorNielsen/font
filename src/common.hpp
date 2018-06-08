@@ -1,6 +1,7 @@
 #ifndef COMMON_HPP_INCLUDED
 #define COMMON_HPP_INCLUDED
 
+#include "types.hpp"
 
 template <typename T>
 T sign(T val)

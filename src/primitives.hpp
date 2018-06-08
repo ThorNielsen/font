@@ -41,23 +41,16 @@ struct PackedBezier
         : p0x(p.x), p1x(q.x), p2x(r.x),
           p0y(p.y), p1y(q.y), p2y(r.y)
     {
-        miny = std::min(p0y, std::min(p1y, p2y));
-        auto A = p0y-2*p1y+p2y;
-        pc |= (p0y < p1y)      ; // e < g
-        pc |= (p2y < p1y)  << 1; // k < g
-        pc |= (p0y <= p2y) << 2; // e <= k
-        pc |= (A > 0)      << 3; // A > 0
-        pc |= (A < 0)      << 4; // A < 0
+        // Todo: magic
     }
 
+    U32 magic;
     S16 p0x;
     S16 p1x;
     S16 p2x;
     S16 p0y;
     S16 p1y;
     S16 p2y;
-    S16 miny;
-    U16 pc;
 
     S16 minX() const
     {
@@ -65,7 +58,7 @@ struct PackedBezier
     }
     S16 minY() const
     {
-        return miny;
+        return std::min(p0y, std::min(p1y, p2y));
     }
     S16 maxX() const
     {
