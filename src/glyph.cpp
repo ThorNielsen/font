@@ -189,10 +189,8 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto C = e-b;
     auto K = k-b;
 
-    bool zeroC = std::abs(C) <= 0.f;
-    bool zeroK = std::abs(K) <= 0.f;
-
     auto M = g-k;
+    auto N = e-k;
 
 
     auto E = d-2*f+h;
@@ -214,35 +212,17 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     if (A != 0)
     {
-        minusGood = (e >= g ? C > 0 : A < 0) && (k < g ? K < 0 : A > 0);
-        plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
+        minusGood = (B <= 0 ? C > 0 : A < 0) && (M > 0 ? K < 0 : A > 0);
+        plusGood =  (B > 0 ? C < 0 : A > 0) && (M <= 0 ? K > 0 : A < 0);
     }
 
-    if (B >= 0 && zeroC)
+    if (B > 0 && std::abs(C) <= 0.f)
     {
-        // Prevent problems at tangents.
-        if (!B)
-        {
-            minusGood = false;
-            plusGood = false;
-            if (k > e) plusGood = true;
-            else minusGood = true;
-        }
-
-        if (B > 0) plusGood = true;
+        plusGood = true;
     }
-    if (M >= 0 && zeroK)
+    if (M > 0 && std::abs(K) <= 0.f)
     {
-        // Prevent problems at tangents.
-        if (!M)
-        {
-            minusGood = false;
-            plusGood = false;
-            if (e > k) minusGood = true;
-            else plusGood = true;
-        }
-
-        if (M > 0) minusGood = true;
+        minusGood = true;
     }
 
     // Just check x using floats since doing it exactly means computing a
