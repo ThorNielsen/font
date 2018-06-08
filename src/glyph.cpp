@@ -183,6 +183,9 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& h = bezier.p2x;
     const auto& a = pos.x;
 
+    bool eHit = std::abs(e-b) <= 0.f;
+    bool kHit = std::abs(k-b) <= 0.f;
+
     auto A = e-2*g+k;
     auto B = 2*(g-e);
     auto C = e-b;
@@ -195,11 +198,11 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     if (A == 0)
     {
-        if (std::abs(e-b) <= 0.f && e < k)
+        if (eHit && e < k)
         {
             return -(a <= d);
         }
-        if (std::abs(k-b) <= 0.f && e > k)
+        if (kHit && e > k)
         {
             return (a <= h);
         }
@@ -207,9 +210,6 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         int mul = 1;
         if (e <= k) mul = -1;
 
-        if (!B) return 0;
-        if (B > 0 && !(b > e && C > -B)) return 0;
-        if (B < 0 && !(b < e && C < -B)) return 0;
         float t = -C / (float)B;
         return (t * (E * t + F) + G >= 0) * mul;
     }
@@ -218,8 +218,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     // the only non-integer (and thereby non-exact) variable in the expression
     // is b.
     bool yMonotone = (e <= g && g <= k) || (k <= g && g <= e);
-    if ((!yMonotone && e*k-g*g > b*A) ||
-        (yMonotone && (b >= std::max(e,k) || b < std::min(e, k))))
+    if (!yMonotone && e*k-g*g > b*A)
     {
         return 0;
     }
@@ -237,7 +236,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     plusGood = (e < g ? C < 0 : A > 0) && (k >= g ? K > 0 : A < 0);
 
 
-    if (e <= g && std::abs(e-b) <= 0.f)
+    if (e <= g && eHit)
     {
         // Prevent problems at tangents.
         if (e == g && e < k)
@@ -256,7 +255,7 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
             else minusGood = true;
         }
     }
-    if (k <= g && std::abs(k-b) <= 0.f)
+    if (k <= g && kHit)
     {
         // Prevent problems at tangents.
         if (k == g && k < e)
@@ -307,7 +306,7 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     for (size_t i = beginAt; i < m_curves.size(); ++i)
     {
         if (m_curves[i].minY() > pos.y) return intersections;
-        if (m_curves[i].maxY() < pos.y) continue;
+        if (m_curves[i].maxY() <= pos.y) continue;
         if (m_curves[i].maxX() < pos.x) continue;
 
         intersections += intersect(pos, m_curves[i]);
