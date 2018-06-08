@@ -206,23 +206,92 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         return 0;
     }
 
-    bool minusGood = M > B;
-    bool plusGood = !minusGood;
 
-    if (A != 0)
+    bool bgz = B>0;
+    bool agz = A>0;
+    bool mgz = M>0;
+
+    // Lower bit contains minusGood and higher bit contains plusGood.
+    // Indexed with (C > 0) + 2*(K > 0)
+    U32 magic1[4] = {0,0,0,0}; // Replaces  if (A != 0)  body.
+
+    /// !cgz, !kgz
     {
-        minusGood = (B <= 0 ? C > 0 : A > 0) && (M > 0 ? K <= 0 : A <= 0);
-        plusGood =  (B > 0 ? C <= 0 : A <= 0) && (M <= 0 ? K > 0 : A > 0);
+        magic1[0] |= 1*((bgz ? agz : 0) && (mgz ? 1 : !agz));
+        magic1[0] |= 2*((bgz ? 1 : !agz) && (mgz ? agz : 0));
+    }
+    /// cgz, !kgz
+    {
+        magic1[1] |= 1*((bgz ? agz : 1) && (mgz ? 1 : !agz));
+        magic1[1] |= 2*((bgz ? 0 : !agz) && (mgz ? agz : 0));
+    }
+    /// !cgz, kgz
+    {
+        magic1[2] |= 1*((bgz ? agz : 0) && (mgz ? 0 : !agz));
+        magic1[2] |= 2*((bgz ? 1 : !agz) && (mgz ? agz : 1));
+    }
+    /// cgz, kgz
+    {
+        magic1[3] |= 1*((bgz ? agz : 1) && (mgz ? 0 : !agz));
+        magic1[3] |= 2*((bgz ? 0 : !agz) && (mgz ? agz : 1));
     }
 
-    if (B > 0 && std::abs(C) <= 0.f)
+    // Lower bit contains minusGood and higher bit contains plusGood.
+    // Indexed with (C == 0) + 2*(K == 0)
+    U32 magic2[4] = {0,0,0,0}; // Replaces  pointHit  bodies.
+    /// C!=0, K!=0
+    {
+        magic2[0] |= 1*(M > B);
+        magic2[0] |= 2*(M <= B);
+    }
+    /// C==0, K!=0
+    {
+        magic2[1] |= 1*(M > B);
+        magic2[1] |= 2*(M <= B || bgz);
+    }
+    /// C!=0, K==0
+    {
+        magic2[2] |= 1*(M > B || mgz);
+        magic2[2] |= 2*(M <= B);
+    }
+    /// C==0, K==0
+    {
+        magic2[3] |= 1*(M > B || mgz);
+        magic2[3] |= 2*(M <= B || bgz);
+    }
+
+    /**bool minusGood = M > B;
+    bool plusGood = !minusGood;*/
+
+    bool cgz = C>0;
+    bool kgz = K>0;
+    bool cez = std::abs(C) <= 0.f;
+    bool kez = std::abs(K) <= 0.f;
+    auto magic = magic1[cgz+2*kgz] | magic2[cez+2*kez];
+    bool minusGood = magic&1;
+    bool plusGood = magic&2;
+
+    /**if (A != 0)
+    {
+        auto magic = magic1[cgz+2*kgz];
+        minusGood = magic&1;
+        plusGood = magic&2;
+        //minusGood = (bgz ? agz : cgz) && (mgz ? !kgz : !agz);
+        //plusGood =  (bgz ? !cgz : !agz) && (mgz ? agz : kgz);
+    }*/
+/*
+    (minus, plus) = ((magic1 >> [C>0,K>0]) & 3) | ((magic2 >> [C==0,K==0]) & 3);
+    minus |= (K == 0) * mgz;
+    plus |= (C == 0) * bgz;*/
+/**
+    if (bgz && std::abs(C) <= 0.f)
     {
         plusGood = true;
     }
-    if (M > 0 && std::abs(K) <= 0.f)
+    if (mgz && std::abs(K) <= 0.f)
     {
         minusGood = true;
-    }
+    }*/
 
     // Just check x using floats since doing it exactly means computing a
     // complicated expression which likely needs 64-bit integers even if all
