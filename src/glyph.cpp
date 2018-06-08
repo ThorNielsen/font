@@ -186,10 +186,16 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
 
     auto B = g-e;
     auto A = B+g-k;
+    // Note: This expression may look prone to losing precision, but note that
+    // the only non-integer (and thereby non-exact) variable in the expression
+    // is b.
+    if ((bezier.lookup >> 16) && g*g-e*k < b*A)
+    {
+        return 0;
+    }
+
     auto C = e-b;
     auto K = k-b;
-
-    auto M = A-B;
 
 
     auto E = d-2*f+h;
@@ -197,101 +203,13 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto G = d-a;
 
 
-    // Note: This expression may look prone to losing precision, but note that
-    // the only non-integer (and thereby non-exact) variable in the expression
-    // is b.
-    bool yMonotone = (B >= 0 && M <= 0) || (B <= 0 && M >= 0);
-    if (!yMonotone && g*g-e*k < b*A)
-    {
-        return 0;
-    }
-
-
-    bool bgz = B>0;
-    bool agz = A>0;
-    bool mgz = M>0;
-
-    // Lower bit contains minusGood and higher bit contains plusGood.
-    // Indexed with (C > 0) + 2*(K > 0)
-    U32 magic1[4] = {0,0,0,0}; // Replaces  if (A != 0)  body.
-
-    /// !cgz, !kgz
-    {
-        magic1[0] |= 1*((bgz ? agz : 0) && (mgz ? 1 : !agz));
-        magic1[0] |= 2*((bgz ? 1 : !agz) && (mgz ? agz : 0));
-    }
-    /// cgz, !kgz
-    {
-        magic1[1] |= 1*((bgz ? agz : 1) && (mgz ? 1 : !agz));
-        magic1[1] |= 2*((bgz ? 0 : !agz) && (mgz ? agz : 0));
-    }
-    /// !cgz, kgz
-    {
-        magic1[2] |= 1*((bgz ? agz : 0) && (mgz ? 0 : !agz));
-        magic1[2] |= 2*((bgz ? 1 : !agz) && (mgz ? agz : 1));
-    }
-    /// cgz, kgz
-    {
-        magic1[3] |= 1*((bgz ? agz : 1) && (mgz ? 0 : !agz));
-        magic1[3] |= 2*((bgz ? 0 : !agz) && (mgz ? agz : 1));
-    }
-
-    // Lower bit contains minusGood and higher bit contains plusGood.
-    // Indexed with (C == 0) + 2*(K == 0)
-    U32 magic2[4] = {0,0,0,0}; // Replaces  pointHit  bodies.
-    /// C!=0, K!=0
-    {
-        magic2[0] |= 1*(M > B);
-        magic2[0] |= 2*(M <= B);
-    }
-    /// C==0, K!=0
-    {
-        magic2[1] |= 1*(M > B);
-        magic2[1] |= 2*(M <= B || bgz);
-    }
-    /// C!=0, K==0
-    {
-        magic2[2] |= 1*(M > B || mgz);
-        magic2[2] |= 2*(M <= B);
-    }
-    /// C==0, K==0
-    {
-        magic2[3] |= 1*(M > B || mgz);
-        magic2[3] |= 2*(M <= B || bgz);
-    }
-
-    /**bool minusGood = M > B;
-    bool plusGood = !minusGood;*/
 
     bool cgz = C>0;
     bool kgz = K>0;
     bool cez = std::abs(C) <= 0.f;
     bool kez = std::abs(K) <= 0.f;
-    auto magic = magic1[cgz+2*kgz] | magic2[cez+2*kez];
-    bool minusGood = magic&1;
-    bool plusGood = magic&2;
-
-    /**if (A != 0)
-    {
-        auto magic = magic1[cgz+2*kgz];
-        minusGood = magic&1;
-        plusGood = magic&2;
-        //minusGood = (bgz ? agz : cgz) && (mgz ? !kgz : !agz);
-        //plusGood =  (bgz ? !cgz : !agz) && (mgz ? agz : kgz);
-    }*/
-/*
-    (minus, plus) = ((magic1 >> [C>0,K>0]) & 3) | ((magic2 >> [C==0,K==0]) & 3);
-    minus |= (K == 0) * mgz;
-    plus |= (C == 0) * bgz;*/
-/**
-    if (bgz && std::abs(C) <= 0.f)
-    {
-        plusGood = true;
-    }
-    if (mgz && std::abs(K) <= 0.f)
-    {
-        minusGood = true;
-    }*/
+    auto lookup = ((bezier.lookup>>(2*cgz+4*kgz))
+                   | (bezier.lookup>>(8+2*cez+4*kez)))&3;
 
     // Just check x using floats since doing it exactly means computing a
     // complicated expression which likely needs 64-bit integers even if all
@@ -305,23 +223,21 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     float tMinus, tPlus;
     if (A == 0)
     {
-        tMinus = -C / (float)(2*B);
+        tMinus = C / (float)((-2)*B);
         tPlus = tMinus;
     }
     else
     {
         float comp1 = std::sqrt((float)(B*B+A*C));
-        float comp2 = (float)(A);
-        tMinus = (B + comp1)/comp2; // Division for accuracy to enable
-        tPlus  = (B - comp1)/comp2; // comparison with checksums. Later, change
-                                     // comp2 to 1/comp2 and multiply instead.
+        tMinus = (B + comp1)/(float)(A); // Add temp variable invA = 1/A, and
+        tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
-    auto cnt = (tmX >= 0) * minusGood
-               - (tpX >= 0) * plusGood;
+    auto cnt = (tmX >= 0) * (lookup&1)
+               - (tpX >= 0) * ((lookup&2)>>1);
 
     return cnt;
 }

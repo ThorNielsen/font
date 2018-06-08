@@ -23,8 +23,9 @@
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
-					<Add option="-std=c++11" />
+					<Add option="-fexpensive-optimizations" />
 					<Add option="-O3" />
+					<Add option="-std=c++11" />
 					<Add option="-Wno-error=unsafe-loop-optimizations" />
 					<Add option="-Werror" />
 				</Compiler>
@@ -74,6 +75,7 @@
 		<Unit filename="src/image.hpp" />
 		<Unit filename="src/main.cpp" />
 		<Unit filename="src/matrix2.hpp" />
+		<Unit filename="src/primitives.cpp" />
 		<Unit filename="src/primitives.hpp" />
 		<Unit filename="src/timer.hpp" />
 		<Unit filename="src/types.hpp" />

@@ -41,10 +41,10 @@ struct PackedBezier
         : p0x(p.x), p1x(q.x), p2x(r.x),
           p0y(p.y), p1y(q.y), p2y(r.y)
     {
-        // Todo: magic
+        construct();
     }
 
-    U32 magic;
+    U32 lookup;
     S16 p0x;
     S16 p1x;
     S16 p2x;
@@ -68,6 +68,8 @@ struct PackedBezier
     {
         return std::max(p0y, std::max(p1y, p2y));
     }
+private:
+    void construct();
 };
 
 #endif // PRIMITIVES_HPP_INCLUDED
