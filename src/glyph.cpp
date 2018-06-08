@@ -183,26 +183,10 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     const auto& h = bezier.p2x;
     const auto& a = pos.x;
 
-
     auto B = g-e;
     auto A = B+g-k;
-    // Note: This expression may look prone to losing precision, but note that
-    // the only non-integer (and thereby non-exact) variable in the expression
-    // is b.
-    if ((bezier.lookup >> 16) && g*g-e*k < b*A)
-    {
-        return 0;
-    }
-
     auto C = e-b;
     auto K = k-b;
-
-
-    auto E = d-2*f+h;
-    auto F = 2*(f-d);
-    auto G = d-a;
-
-
 
     bool cgz = C>0;
     bool kgz = K>0;
@@ -233,6 +217,9 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
+    auto E = d-2*f+h;
+    auto F = 2*(f-d);
+    auto G = d-a;
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
