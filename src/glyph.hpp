@@ -39,12 +39,14 @@ public:
     const GlyphInfo& info() const { return m_info; }
 
     bool isInside(vec2 pos, size_t& beginAt) const noexcept;
+    bool xIsInside(vec2 pos) const noexcept;
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control);
 
+    std::vector<PackedBezier> m_xcurves;
     std::vector<PackedBezier> m_ycurves;
 
     CompressedBitmap m_bitmap;

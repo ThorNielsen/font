@@ -77,7 +77,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 {
     ivec2 offset{0, 0};
     size_t contourBegin = 0;
-    std::vector<ivec2> ycurvecoords;
+    std::vector<ivec2> curves;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
         auto prevIdx = contourEnd[contour]-1;
@@ -108,22 +108,11 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 prevControl = false;
             }
             prevPos = cPos;
-            if (p.y != q.y || q.y != r.y)
-            {
-                if (p.x == q.x && p.y == q.y && q.y < r.y)
-                {
-                    q = r;
-                }
-                if (r.x == q.x && r.y == q.y && q.y < p.y)
-                {
-                    q = p;
-                }
-                ycurvecoords.push_back(p);
-                ycurvecoords.push_back(q);
-                ycurvecoords.push_back(r);
-                offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
-                offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
-            }
+            curves.push_back(p);
+            curves.push_back(q);
+            curves.push_back(r);
+            offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
+            offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
         }
         contourBegin = contourEnd[contour];
     }
@@ -131,19 +120,50 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
     --offset.x;
     --offset.y;
 
-    for (size_t i = 0; i < ycurvecoords.size(); i += 3)
+    offset = -offset;
+
+    for (size_t i = 0; i < curves.size(); i += 3)
     {
-        auto p = ycurvecoords[i];
-        auto q = ycurvecoords[i+1];
-        auto r = ycurvecoords[i+2];
-        m_ycurves.emplace_back(p-offset, q-offset, r-offset);
+        auto p = curves[i]+offset;
+        auto q = curves[i+1]+offset;
+        auto r = curves[i+2]+offset;
+        if (p.x != q.x || q.x != r.x)
+        {
+            if (p.y == q.y && p.x == q.x && q.x < r.x)
+            {
+                q = r;
+            }
+            if (r.y == q.y && r.x == q.x && q.x < p.x)
+            {
+                q = p;
+            }
+            m_xcurves.emplace_back(p, q, r);
+        }
+        if (p.y != q.y || q.y != r.y)
+        {
+            if (p.x == q.x && p.y == q.y && q.y < r.y)
+            {
+                q = r;
+            }
+            if (r.x == q.x && r.y == q.y && q.y < p.y)
+            {
+                q = p;
+            }
+            m_ycurves.emplace_back(p, q, r);
+        }
     }
 
-    m_info.hCursorX -= offset.x;
-    m_info.hCursorY -= offset.y;
-    m_info.vCursorX -= offset.x;
-    m_info.vCursorY -= offset.y;
+    m_info.hCursorX += offset.x;
+    m_info.hCursorY += offset.y;
+    m_info.vCursorX += offset.x;
+    m_info.vCursorY += offset.y;
 
+    std::sort(m_xcurves.begin(), m_xcurves.end(),
+              [](const PackedBezier& a, const PackedBezier& b)
+              {
+                  if (a.minX() == b.minX()) return a.minX() < b.minX();
+                  return a.minX() < b.minX();
+              });
     std::sort(m_ycurves.begin(), m_ycurves.end(),
               [](const PackedBezier& a, const PackedBezier& b)
               {
@@ -257,11 +277,31 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     }
     for (size_t i = beginAt; i < m_ycurves.size(); ++i)
     {
-        if (m_ycurves[i].minY() > pos.y) break;
-        if (m_ycurves[i].maxY() <= pos.y) continue;
-        if (m_ycurves[i].maxX() < pos.x) continue;
+        const auto& curve = m_ycurves[i];
+        if (curve.minY() > pos.y) break;
+        if (curve.maxY() <= pos.y) continue;
+        if (curve.maxX() < pos.x) continue;
         float dummy;
-        intersections += intersect(pos, m_ycurves[i], dummy, dummy);
+        intersections += intersect(pos, curve, dummy, dummy);
+    }
+    return intersections;
+}
+
+bool Glyph::xIsInside(vec2 pos) const noexcept
+{
+    std::swap(pos.x, pos.y);
+    int intersections = 0;
+    for (size_t i = 0; i < m_xcurves.size(); ++i)
+    {
+        auto cx = m_xcurves[i];
+        PackedBezier curve(ivec2{cx.p0y, cx.p0x},
+                           ivec2{cx.p1y, cx.p1x},
+                           ivec2{cx.p2y, cx.p2x});
+        if (curve.minY() > pos.y) break;
+        if (curve.maxY() <= pos.y) continue;
+        if (curve.maxX() < pos.x) continue;
+        float dummy;
+        intersections += intersect(pos, curve, dummy, dummy);
     }
     return intersections;
 }
@@ -314,6 +354,7 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
             auto inside = glyph.isInside(glyphPos, beginAt);
+            //auto inside = glyph.xIsInside(glyphPos);
             img.setPixel(x, y, inside ? 0xffffff : 0);
         }
     }
