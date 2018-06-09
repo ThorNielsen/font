@@ -176,16 +176,7 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-// Note that to handle self-intersecting glyphs (for example where two different
-// outlines intersect (which sometimes happens for e.g. ffl-ligatures)) this
-// computes not how many intersections there are but instead a number signifying
-// in which direction a curve is intersected. This means that a point is
-// considered outside the glyph if and only if a ray from this point will
-// intersect the same number of curves having opposite direction (e.g. if it
-// intersects two curves where the point is to the right of these, then it must
-// intersect two curves which it is to the left of in order to be considered
-// outside all outlines).
-int intersect(vec2 pos, PackedBezier bezier) noexcept
+int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept
 {
     float C = bezier.p0y-pos.y;
     float K = bezier.p2y-pos.y;
@@ -219,12 +210,44 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
+    minusX = tmX * (lookup&1);
+    plusX = tpX * ((lookup&2)>>1);
+
     auto cnt = (tmX >= 0) * (lookup&1)
                - (tpX >= 0) * ((lookup&2)>>1);
 
     return cnt;
 }
 
+// Todo: Add some form of anti-aliasing. One option is the method specified in
+// https://wdobbie.com/post/gpu-text-rendering-with-vector-textures/
+// but this may not work if we do not know what curves are on the outline. So we
+// need a way to distinguish between curves on the outline and curves inside the
+// glyph (for self-intersecting glyphs). However, this is not as simple as it
+// seems, since we could have a situation where two curves are partially on the
+// outline - take a look at the following:
+// 6             |  /
+// 5   Inside    | /
+// 4             |/
+// 3             |    Outside
+// 2            /|
+// 1           / |
+// 0          /  |
+// At y=0, '|' is on the outline, but at y=3 this changes to them both being
+// on the outline and finally at y=6, '/' is on the outline but '|' is not.
+// One option is to mark all such locations, but this will probably be too
+// expensive.
+
+// Another way of anti-aliasing could be to simply calculate the distance to the
+// nearest curve in a few directions (say {+-1, 0} and {0, +-1}, since we have
+// the code to find horizontal distances and this can easily be adapted to work
+// with vertical distances), compare these distances to the pixel size to get an
+// estimate of the coverage and hope that this curve is indeed on the outline -
+// it will work fine if the font is well-behaved and there are no self-
+// intersections (or they only overlap very little). Unfortunately overlapping
+// is somewhat common (depending on the font) and if we happen to hit a point
+// very near an interior line, we could end up with a pixel value of about one
+// half meaning that there would potentially be a gray line inside the glyph.
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
     int intersections = 0;
@@ -234,11 +257,11 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
     }
     for (size_t i = beginAt; i < m_ycurves.size(); ++i)
     {
-        if (m_ycurves[i].minY() > pos.y) return intersections;
+        if (m_ycurves[i].minY() > pos.y) break;
         if (m_ycurves[i].maxY() <= pos.y) continue;
         if (m_ycurves[i].maxX() < pos.x) continue;
-
-        intersections += intersect(pos, m_ycurves[i]);
+        float dummy;
+        intersections += intersect(pos, m_ycurves[i], dummy, dummy);
     }
     return intersections;
 }

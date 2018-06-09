@@ -52,7 +52,7 @@ private:
     GlyphInfo m_info;
 };
 
-int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept;
+int intersect(vec2 pos, PackedBezier bezier) noexcept;
 
 struct FontInfo
 {
