@@ -116,12 +116,12 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 {
                     q = p;
                 }
-                m_curves.emplace_back(p, q, r);
+                m_ycurves.emplace_back(p, q, r);
             }
         }
         contourBegin = contourEnd[contour];
     }
-    std::sort(m_curves.begin(), m_curves.end(),
+    std::sort(m_ycurves.begin(), m_ycurves.end(),
               [](const PackedBezier& a, const PackedBezier& b)
               {
                   if (a.minY() == b.minY()) return a.minY() < b.minY();
@@ -140,15 +140,15 @@ void Glyph::dumpInfo() const
     std::cout << "Vertical mode offset: (" << m_info.vCursorX << ", "
               << m_info.vCursorY << ")\n";
     std::cout << "Vertical mode advance: " << m_info.yAdvance << "\n";
-    std::cout << "Bezier count: " << m_curves.size() << std::endl;
-    for (size_t i = 0; i < m_curves.size(); ++i)
+    std::cout << "Bezier count: " << m_ycurves.size() << std::endl;
+    for (size_t i = 0; i < m_ycurves.size(); ++i)
     {
         std::cout << "Bezier #" << i << ": ";
-        std::cout << "[(" << m_curves[i].g << ", " << m_curves[i].p0y << "), "
-                  <<  "(" << (m_curves[i].f>>1) + m_curves[i].g
-                  << ", " << m_curves[i].p1y << "), "
-                  <<  "(" << m_curves[i].e + m_curves[i].f + m_curves[i].g
-                  << ", " << m_curves[i].p2y << ")]"
+        std::cout << "[(" << m_ycurves[i].g << ", " << m_ycurves[i].p0y << "), "
+                  <<  "(" << (m_ycurves[i].f>>1) + m_ycurves[i].g
+                  << ", " << m_ycurves[i].p1y << "), "
+                  <<  "(" << m_ycurves[i].e + m_ycurves[i].f + m_ycurves[i].g
+                  << ", " << m_ycurves[i].p2y << ")]"
                   << std::endl;
 
     }
@@ -166,8 +166,6 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
 {
-    auto B = bezier.p1y-bezier.p0y;
-    auto A = B+bezier.p1y-bezier.p2y;
     auto C = bezier.p0y-pos.y;
     auto K = bezier.p2y-pos.y;
 
@@ -182,6 +180,8 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
     {
         return (lookup&1) - ((lookup&2)>>1);
     }
+    auto B = bezier.p1y-bezier.p0y;
+    auto A = B+bezier.p1y-bezier.p2y;
 
     float tMinus, tPlus;
     if (A == 0)
@@ -196,11 +196,9 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
         tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
-    auto E = bezier.e;
-    auto F = bezier.f;
     auto G = bezier.g-pos.x;
-    auto tmX = tMinus * (E * tMinus + F) + G;
-    auto tpX = tPlus * (E * tPlus + F) + G;
+    auto tmX = tMinus * (bezier.e * tMinus + bezier.f) + G;
+    auto tpX = tPlus * (bezier.e * tPlus + bezier.f) + G;
 
     auto cnt = (tmX >= 0) * (lookup&1)
                - (tpX >= 0) * ((lookup&2)>>1);
@@ -211,20 +209,21 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
 bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
 {
     int intersections = 0;
-    while (beginAt < m_curves.size() && m_curves[beginAt].maxY() < pos.y)
+    while (beginAt < m_ycurves.size() && m_ycurves[beginAt].maxY() < pos.y)
     {
         ++beginAt;
     }
-    for (size_t i = beginAt; i < m_curves.size(); ++i)
+    for (size_t i = beginAt; i < m_ycurves.size(); ++i)
     {
-        if (m_curves[i].minY() > pos.y) return intersections;
-        if (m_curves[i].maxY() <= pos.y) continue;
-        if (m_curves[i].maxX() < pos.x) continue;
+        if (m_ycurves[i].minY() > pos.y) return intersections;
+        if (m_ycurves[i].maxY() <= pos.y) continue;
+        if (m_ycurves[i].maxX() < pos.x) continue;
 
-        intersections += intersect(pos, m_curves[i], m_curves[i].minX() >= pos.x);
+        intersections += intersect(pos,
+                                   m_ycurves[i],
+                                   m_ycurves[i].minX() >= pos.x);
     }
     return intersections;
-
 }
 
 FontInfo::FontInfo(FT_Face face)

@@ -44,7 +44,7 @@ private:
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control);
 
-    std::vector<PackedBezier> m_curves;
+    std::vector<PackedBezier> m_ycurves;
 
     GlyphInfo m_info;
 };
