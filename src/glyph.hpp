@@ -38,8 +38,8 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
-    bool isInside(vec2 pos, size_t& beginAt) const noexcept;
     bool xIsInside(vec2 pos) const noexcept;
+    bool yIsInside(vec2 pos) const noexcept;
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,

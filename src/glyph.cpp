@@ -268,28 +268,8 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
 // is somewhat common (depending on the font) and if we happen to hit a point
 // very near an interior line, we could end up with a pixel value of about one
 // half meaning that there would potentially be a gray line inside the glyph.
-bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
-{
-    int intersections = 0;
-    while (beginAt < m_ycurves.size() && m_ycurves[beginAt].maxY() < pos.y)
-    {
-        ++beginAt;
-    }
-    for (size_t i = beginAt; i < m_ycurves.size(); ++i)
-    {
-        const auto& curve = m_ycurves[i];
-        if (curve.minY() > pos.y) break;
-        if (curve.maxY() <= pos.y) continue;
-        if (curve.maxX() < pos.x) continue;
-        float dummy;
-        intersections += intersect(pos, curve, dummy, dummy);
-    }
-    return intersections;
-}
-
 bool Glyph::xIsInside(vec2 pos) const noexcept
 {
-    std::swap(pos.x, pos.y);
     int intersections = 0;
     for (size_t i = 0; i < m_xcurves.size(); ++i)
     {
@@ -301,10 +281,26 @@ bool Glyph::xIsInside(vec2 pos) const noexcept
         if (curve.maxY() <= pos.y) continue;
         if (curve.maxX() < pos.x) continue;
         float dummy;
+        intersections += intersect({pos.y, pos.x}, curve, dummy, dummy);
+    }
+    return intersections;
+}
+
+bool Glyph::yIsInside(vec2 pos) const noexcept
+{
+    int intersections = 0;
+    for (size_t i = 0; i < m_ycurves.size(); ++i)
+    {
+        const auto& curve = m_ycurves[i];
+        if (curve.minY() > pos.y) break;
+        if (curve.maxY() <= pos.y) continue;
+        if (curve.maxX() < pos.x) continue;
+        float dummy;
         intersections += intersect(pos, curve, dummy, dummy);
     }
     return intersections;
 }
+
 
 FontInfo::FontInfo(FT_Face face)
 {
@@ -345,7 +341,6 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
 
     Image img(pixelWidth, pixelHeight);
 
-    size_t beginAt = 0;
     for (int y = pixelHeight-1; y >= 0; --y)
     {
         for (int x = 0; x < pixelWidth; ++x)
@@ -353,8 +348,7 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
-            auto inside = glyph.isInside(glyphPos, beginAt);
-            //auto inside = glyph.xIsInside(glyphPos);
+            auto inside = glyph.yIsInside(glyphPos);
             img.setPixel(x, y, inside ? 0xffffff : 0);
         }
     }
