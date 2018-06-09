@@ -38,23 +38,23 @@ struct PackedBezier
     PackedBezier() = default;
     template <typename T>
     PackedBezier(vec2_t<T> p, vec2_t<T> q, vec2_t<T> r)
-        : p0x(p.x), p1x(q.x), p2x(r.x),
+        : e(p.x - 2*q.x + r.x), f(2*(q.x - p.x)), g(p.x),
           p0y(p.y), p1y(q.y), p2y(r.y)
     {
         construct();
     }
 
     U32 lookup;
-    S16 p0x;
-    S16 p1x;
-    S16 p2x;
+    S16 e;
+    S16 f;
+    S16 g;
     S16 p0y;
     S16 p1y;
     S16 p2y;
 
     S16 minX() const
     {
-        return std::min(p0x, std::min(p1x, p2x));
+        return std::min(g, std::min<S16>(e+f+g, (f>>1)+g));
     }
     S16 minY() const
     {
@@ -62,7 +62,7 @@ struct PackedBezier
     }
     S16 maxX() const
     {
-        return std::max(p0x, std::max(p1x, p2x));
+        return std::max(g, std::max<S16>(e+f+g, (f>>1)+g));
     }
     S16 maxY() const
     {

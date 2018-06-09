@@ -83,50 +83,40 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         bool prevControl = control[prevIdx];
         for (size_t i = contourBegin; i < contourEnd[contour]; prevIdx = i++)
         {
+            ivec2 p{0, 0}, q{0, 0}, r{0, 0};
             auto cPos = position[i];
             if (control[i])
             {
                 auto nextIdx = i+1-contourBegin;
                 nextIdx %= (contourEnd[contour]-contourBegin);
                 nextIdx += contourBegin;
-                m_curves.push_back({prevPos, cPos, position[nextIdx]});
+                p = prevPos;
+                q = cPos;
+                r = position[nextIdx];
                 prevControl = true;
             }
             else if (!prevControl)
             {
-                m_curves.push_back({prevPos, prevPos, cPos});
+                p = prevPos;
+                q = prevPos;
+                r = cPos;
             }
             else
             {
                 prevControl = false;
             }
             prevPos = cPos;
-            if (!m_curves.empty())
+            if (p.y != q.y || q.y != r.y)
             {
-                if (m_curves.back().p0x == m_curves.back().p1x
-                    && m_curves.back().p1x == m_curves.back().p2x)
+                if (p.x == q.x && p.y == q.y && q.y < r.y)
                 {
-                    m_curves.back().p1y = m_curves.back().p0y;
+                    q = r;
                 }
-                if (m_curves.back().p0x == m_curves.back().p1x
-                    && m_curves.back().p0y == m_curves.back().p1y
-                    && m_curves.back().p1y < m_curves.back().p2y)
+                if (r.x == q.x && r.y == q.y && q.y < p.y)
                 {
-                    m_curves.back().p1x = m_curves.back().p2x;
-                    m_curves.back().p1y = m_curves.back().p2y;
+                    q = p;
                 }
-                if (m_curves.back().p2x == m_curves.back().p1x
-                    && m_curves.back().p2y == m_curves.back().p1y
-                    && m_curves.back().p1y < m_curves.back().p0y)
-                {
-                    m_curves.back().p1x = m_curves.back().p0x;
-                    m_curves.back().p1y = m_curves.back().p0y;
-                }
-                if (m_curves.back().p0y == m_curves.back().p1y
-                    && m_curves.back().p1y == m_curves.back().p2y)
-                {
-                    m_curves.pop_back();
-                }
+                m_curves.emplace_back(p, q, r);
             }
         }
         contourBegin = contourEnd[contour];
@@ -154,9 +144,11 @@ void Glyph::dumpInfo() const
     for (size_t i = 0; i < m_curves.size(); ++i)
     {
         std::cout << "Bezier #" << i << ": ";
-        std::cout << "[(" << m_curves[i].p0x << ", " << m_curves[i].p0y << "), "
-                  <<  "(" << m_curves[i].p1x << ", " << m_curves[i].p1y << "), "
-                  <<  "(" << m_curves[i].p2x << ", " << m_curves[i].p2y << ")]"
+        std::cout << "[(" << m_curves[i].g << ", " << m_curves[i].p0y << "), "
+                  <<  "(" << (m_curves[i].f>>1) + m_curves[i].g
+                  << ", " << m_curves[i].p1y << "), "
+                  <<  "(" << m_curves[i].e + m_curves[i].f + m_curves[i].g
+                  << ", " << m_curves[i].p2y << ")]"
                   << std::endl;
 
     }
@@ -199,9 +191,9 @@ int intersect(vec2 pos, PackedBezier bezier) noexcept
         tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
-    auto E = bezier.p0x-2*bezier.p1x+bezier.p2x;
-    auto F = 2*(bezier.p1x-bezier.p0x);
-    auto G = bezier.p0x-pos.x;
+    auto E = bezier.e;
+    auto F = bezier.f;
+    auto G = bezier.g-pos.x;
     auto tmX = tMinus * (E * tMinus + F) + G;
     auto tpX = tPlus * (E * tPlus + F) + G;
 
