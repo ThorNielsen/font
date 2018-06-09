@@ -185,7 +185,7 @@ void Glyph::dumpInfo() const
 // intersects two curves where the point is to the right of these, then it must
 // intersect two curves which it is to the left of in order to be considered
 // outside all outlines).
-int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
+int intersect(vec2 pos, PackedBezier bezier) noexcept
 {
     float C = bezier.p0y-pos.y;
     float K = bezier.p2y-pos.y;
@@ -196,11 +196,6 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
     bool kez = std::abs(K) <= 0.f;
     auto lookup = ((bezier.lookup>>(2*cgz+4*kgz))
                    | (bezier.lookup>>(8+2*cez+4*kez)))&3;
-
-    if (xOK)
-    {
-        return (lookup&1) - ((lookup&2)>>1);
-    }
 
     S16 B = bezier.p1y-bezier.p0y;
     S16 A = B+bezier.p1y-bezier.p2y;
@@ -243,9 +238,7 @@ bool Glyph::isInside(vec2 pos, size_t& beginAt) const noexcept
         if (m_ycurves[i].maxY() <= pos.y) continue;
         if (m_ycurves[i].maxX() < pos.x) continue;
 
-        intersections += intersect(pos,
-                                   m_ycurves[i],
-                                   m_ycurves[i].minX() >= pos.x);
+        intersections += intersect(pos, m_ycurves[i]);
     }
     return intersections;
 }

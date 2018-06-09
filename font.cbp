@@ -66,6 +66,8 @@
 			<Add library="freetype" />
 		</Linker>
 		<Unit filename="src/common.hpp" />
+		<Unit filename="src/compressedbitmap.cpp" />
+		<Unit filename="src/compressedbitmap.hpp" />
 		<Unit filename="src/crc.cpp" />
 		<Unit filename="src/crc.hpp" />
 		<Unit filename="src/freetype.hpp" />

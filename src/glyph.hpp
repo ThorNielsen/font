@@ -1,6 +1,7 @@
 #ifndef GLYPH_HPP_INCLUDED
 #define GLYPH_HPP_INCLUDED
 
+#include "compressedbitmap.hpp"
 #include "freetype.hpp"
 #include "image.hpp"
 #include "primitives.hpp"
@@ -45,6 +46,8 @@ private:
                          const std::vector<bool>& control);
 
     std::vector<PackedBezier> m_ycurves;
+
+    CompressedBitmap m_bitmap;
 
     GlyphInfo m_info;
 };
