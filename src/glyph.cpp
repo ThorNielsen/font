@@ -58,8 +58,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     }
     contourEnd[contour] = position.size();
 
-    extractOutlines(contourEnd, position, isControl);
-
     m_info.width = static_cast<int>(metrics.width);
     m_info.height = static_cast<int>(metrics.height);
     m_info.hCursorX = static_cast<int>(metrics.horiBearingX);
@@ -68,6 +66,8 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.vCursorX = static_cast<int>(metrics.vertBearingX);
     m_info.vCursorY = static_cast<int>(metrics.vertBearingY);
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
+
+    extractOutlines(contourEnd, position, isControl);
 }
 
 
@@ -75,7 +75,9 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
                             const std::vector<bool>& control)
 {
+    ivec2 offset{0, 0};
     size_t contourBegin = 0;
+    std::vector<ivec2> ycurvecoords;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
         auto prevIdx = contourEnd[contour]-1;
@@ -116,11 +118,32 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 {
                     q = p;
                 }
-                m_ycurves.emplace_back(p, q, r);
+                ycurvecoords.push_back(p);
+                ycurvecoords.push_back(q);
+                ycurvecoords.push_back(r);
+                offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
+                offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
             }
         }
         contourBegin = contourEnd[contour];
     }
+
+    --offset.x;
+    --offset.y;
+
+    for (size_t i = 0; i < ycurvecoords.size(); i += 3)
+    {
+        auto p = ycurvecoords[i];
+        auto q = ycurvecoords[i+1];
+        auto r = ycurvecoords[i+2];
+        m_ycurves.emplace_back(p-offset, q-offset, r-offset);
+    }
+
+    m_info.hCursorX -= offset.x;
+    m_info.hCursorY -= offset.y;
+    m_info.vCursorX -= offset.x;
+    m_info.vCursorY -= offset.y;
+
     std::sort(m_ycurves.begin(), m_ycurves.end(),
               [](const PackedBezier& a, const PackedBezier& b)
               {
@@ -144,11 +167,9 @@ void Glyph::dumpInfo() const
     for (size_t i = 0; i < m_ycurves.size(); ++i)
     {
         std::cout << "Bezier #" << i << ": ";
-        std::cout << "[(" << m_ycurves[i].g << ", " << m_ycurves[i].p0y << "), "
-                  <<  "(" << (m_ycurves[i].f>>1) + m_ycurves[i].g
-                  << ", " << m_ycurves[i].p1y << "), "
-                  <<  "(" << m_ycurves[i].e + m_ycurves[i].f + m_ycurves[i].g
-                  << ", " << m_ycurves[i].p2y << ")]"
+        std::cout << "[(" << m_ycurves[i].p0x << ", " << m_ycurves[i].p0y << "), "
+                  <<  "(" << m_ycurves[i].p1x << ", " << m_ycurves[i].p1y << "), "
+                  <<  "(" << m_ycurves[i].p2x << ", " << m_ycurves[i].p2y << ")]"
                   << std::endl;
 
     }
@@ -166,8 +187,8 @@ void Glyph::dumpInfo() const
 // outside all outlines).
 int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
 {
-    auto C = bezier.p0y-pos.y;
-    auto K = bezier.p2y-pos.y;
+    float C = bezier.p0y-pos.y;
+    float K = bezier.p2y-pos.y;
 
     bool cgz = C>0;
     bool kgz = K>0;
@@ -180,8 +201,9 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
     {
         return (lookup&1) - ((lookup&2)>>1);
     }
-    auto B = bezier.p1y-bezier.p0y;
-    auto A = B+bezier.p1y-bezier.p2y;
+
+    S16 B = bezier.p1y-bezier.p0y;
+    S16 A = B+bezier.p1y-bezier.p2y;
 
     float tMinus, tPlus;
     if (A == 0)
@@ -196,9 +218,11 @@ int intersect(vec2 pos, PackedBezier bezier, bool xOK) noexcept
         tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
     }
 
-    auto G = bezier.g-pos.x;
-    auto tmX = tMinus * (bezier.e * tMinus + bezier.f) + G;
-    auto tpX = tPlus * (bezier.e * tPlus + bezier.f) + G;
+    S16 E = bezier.p0x-2*bezier.p1x+bezier.p2x;
+    S16 F = 2*(bezier.p1x-bezier.p0x);
+    float G = bezier.p0x-pos.x;
+    auto tmX = tMinus * (E * tMinus + F) + G;
+    auto tpX = tPlus * (E * tPlus + F) + G;
 
     auto cnt = (tmX >= 0) * (lookup&1)
                - (tpX >= 0) * ((lookup&2)>>1);

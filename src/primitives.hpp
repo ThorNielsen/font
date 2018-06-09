@@ -33,38 +33,45 @@ struct QuadraticBezier_t
 
 using QuadraticBezier = QuadraticBezier_t<S32>;
 
+
 struct PackedBezier
 {
+    // All variables of type 'T' in this object will always lie in the range
+    // [0, 2^15), they will in particular always be unsigned. S16 is chosen
+    // since measurements show this gives the highest performance (although S64
+    // is somewhat faster, it is not very cache-friendly and adds padding). Do
+    // note that the differences are minuscule, however (about ~2%).
+    using T = S16;
     PackedBezier() = default;
     template <typename T>
     PackedBezier(vec2_t<T> p, vec2_t<T> q, vec2_t<T> r)
-        : e(p.x - 2*q.x + r.x), f(2*(q.x - p.x)), g(p.x),
+        : p0x(p.x), p1x(q.x), p2x(r.x),
           p0y(p.y), p1y(q.y), p2y(r.y)
     {
         construct();
     }
 
     U32 lookup;
-    S16 e;
-    S16 f;
-    S16 g;
-    S16 p0y;
-    S16 p1y;
-    S16 p2y;
+    T p0x;
+    T p1x;
+    T p2x;
+    T p0y;
+    T p1y;
+    T p2y;
 
-    S16 minX() const
+    T minX() const
     {
-        return std::min(g, std::min<S16>(e+f+g, (f>>1)+g));
+        return std::min(p0x, std::min(p1x, p2x));
     }
-    S16 minY() const
+    T minY() const
     {
         return std::min(p0y, std::min(p1y, p2y));
     }
-    S16 maxX() const
+    T maxX() const
     {
-        return std::max(g, std::max<S16>(e+f+g, (f>>1)+g));
+        return std::max(p0x, std::max(p1x, p2x));
     }
-    S16 maxY() const
+    T maxY() const
     {
         return std::max(p0y, std::max(p1y, p2y));
     }

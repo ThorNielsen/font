@@ -2,9 +2,9 @@
 
 void PackedBezier::construct()
 {
-    auto B = p1y-p0y;
-    auto A = B+p1y-p2y;
-    auto M = A-B;
+    S16 B = p1y-p0y;
+    S16 A = B+p1y-p2y;
+    S16 M = A-B;
 
     bool bgz = B>0;
     bool agz = A>0;
