@@ -75,7 +75,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
                             const std::vector<bool>& control)
 {
-    ivec2 offset{0, 100000};
+    ivec2 offset{32767, 32767};
     size_t contourBegin = 0;
     std::vector<PackedBezier> curves;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
@@ -126,8 +126,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 
     offset = -offset;
 
-    std::cerr << "Translating outlines by " << offset << "\n";
-
     for (auto& curve : curves)
     {
         curve.p0x += offset.x; curve.p1x += offset.x; curve.p2x += offset.x;
@@ -142,7 +140,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 
     sortByY(curves);
     processCurves(curves);
-    createBitmap(4, curves);
+    createBitmap(1, curves);
 }
 
 void Glyph::processCurves(const std::vector<PackedBezier>& curves)
@@ -220,67 +218,108 @@ void Glyph::createBitmap(size_t logLength,
 {
     m_bitmap.setResolution(logLength);
     size_t length = 1 << logLength;
-    size_t maxDim = std::max(m_info.width, m_info.height)+1; // +1, since boxes
-                                                             // are half-open.
+    // We add two to maximum dimension since boxes are half-open and zero
+    // coordinates are reserved.
+    size_t maxDim = std::max(m_info.width, m_info.height)+1;
     m_boxLength = maxDim / length + (maxDim % length ? 1 : 0);
 
     for (size_t y = 0; y < length; ++y)
     {
         for (size_t x = 0; x < length; ++x)
         {
-            auto p0 = ivec2{int(m_info.hCursorX+x*m_boxLength),
+            auto p0 = ivec2{int(x*m_boxLength),
                             int(y*m_boxLength)};
             auto p1 = p0+ivec2{int(m_boxLength), int(m_boxLength)};
             bool intersections = boxIntersects(p0, p1, curves);
             int status = 0;
             if (!intersections)
             {
-                status = yIsInside({(float)p0.x, (float)p0.y});
+                // Trick yIsInside into thinking that the current pixel should
+                // be calculated instead of looked up.
+                m_bitmap.setValue(x, y, 2);
+                status = yIsInside({(float)(p0.x+p1.x)/2, (float)(p0.y+p1.y)/2});
             }
             else
             {
                 status = 2;
             }
-            std::cerr << status;
             m_bitmap.setValue(x, y, status);
         }
-        std::cerr << '\n';
     }
+}
+
+int custIntersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept
+{
+    float C = bezier.p0y-pos.y;
+    float K = bezier.p2y-pos.y;
+
+    bool cgz = C>0;
+    bool kgz = K>0;
+    bool cez = std::abs(C) <= 0.f;
+    bool kez = std::abs(K) <= 0.f;
+    auto lookup = (bezier.lookup>>(2*cgz+4*kgz))&3;
+    lookup |= cez + kez*2;
+
+    S16 B = bezier.p1y-bezier.p0y;
+    S16 A = B+bezier.p1y-bezier.p2y;
+
+    float tMinus, tPlus;
+    if (A == 0)
+    {
+        tMinus = C / (float)((-2)*B);
+        tPlus = tMinus;
+    }
+    else
+    {
+        float comp1 = std::sqrt((float)(B*B+A*C));
+        tMinus = (B + comp1)/(float)(A); // Add temp variable invA = 1/A, and
+        tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
+    }
+
+    S16 E = bezier.p0x-2*bezier.p1x+bezier.p2x;
+    S16 F = 2*(bezier.p1x-bezier.p0x);
+    float G = bezier.p0x-pos.x;
+    auto tmX = tMinus * (E * tMinus + F);
+    auto tpX = tPlus * (E * tPlus + F);
+
+    minusX = (tmX+bezier.p0x) * (lookup&1);
+    plusX = (tpX+bezier.p0x) * ((lookup&2)>>1);
+
+    auto cnt = (tmX + G >= 0) * (lookup&1)
+               - (tpX + G >= 0) * ((lookup&2)>>1);
+
+    return cnt;
 }
 
 bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
                           const std::vector<PackedBezier>& curves)
 {
-    //std::cerr << p0 << "\n";
-    //bool dbg = p0.x == 93 && p0.y == -1;
-    //bool dbg = p0.x == 54 && p0.y == 19;
-    //bool dbg = p0.x == 2 && p0.y == -7;
-    bool dbg = p0.x == 146 && p0.y == -2;
-    dbg = false;
     float p0x = p0.x; float p0y = p0.y;
     float p1x = p1.x; float p1y = p1.y;
     for (const PackedBezier& yCurve : curves)
     {
+        bool xDegenerate = yCurve.p0x == yCurve.p1x && yCurve.p1x == yCurve.p2x;
+        bool yDegenerate = yCurve.p0y == yCurve.p1y && yCurve.p1y == yCurve.p2y;
+        if (xDegenerate && yCurve.p0x == 1) continue;
+        if (xDegenerate && yCurve.p0x == m_info.width) continue;
+        if (yDegenerate && yCurve.p0y == 1) continue;
+        if (yDegenerate && yCurve.p0y == m_info.height) continue;
         float t0 = 0.f, t1 = 0.f;
         if (yCurve.minY() <= p0y && yCurve.maxY() > p0y)
         {
-            intersect({p0x, p0y}, yCurve, t0, t1);
-            if ((p0x < t0 && t0 <= p1x) || (p0x < t1 && t1 <= p1x))
+            custIntersect({p0x, p0y}, yCurve, t0, t1);
+            if ((t0 > 0 && t0 <= m_info.width+1 && p0x <= t0 && t0 < p1x)
+                || (t1 > 0 && t1 <= m_info.width+1 && p0x <= t1 && t1 < p1x))
             {
-                if (dbg)
-                    std::cerr << yCurve << " intersects [" << p0x << ", " << p1x << ")x{"
-                              << p0y << "}\n";
                 return true;
             }
         }
         if (yCurve.minY() <= p1y && yCurve.maxY() > p1y)
         {
-            intersect({p0x, p1y}, yCurve, t0, t1);
-            if ((p0x < t0 && t0 <= p1x) || (p0x < t1 && t1 <= p1x))
+            custIntersect({p0x, p1y}, yCurve, t0, t1);
+            if ((t0 > 0 && t0 <= m_info.width+1 && p0x <= t0 && t0 < p1x)
+                || (t1 > 0 && t1 <= m_info.width+1 && p0x <= t1 && t1 < p1x))
             {
-                if (dbg)
-                    std::cerr << yCurve << " intersects [" << p0x << ", " << p1x << ")x{"
-                              << p1y << "}\n";
                 return true;
             }
         }
@@ -288,32 +327,23 @@ bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
         auto xCurve = yCurve.swapCoordinates();
         if (xCurve.minY() <= p0x && xCurve.maxY() > p0x)
         {
-            intersect({p0y, p0x}, xCurve, t0, t1);
-            if ((p0y < t0 && t0 <= p1y) || (p0y < t1 && t1 <= p1y))
+            custIntersect({p0y, p0x}, xCurve, t0, t1);
+            if ((t0 > 0 && t0 <= m_info.height+1 && p0y <= t0 && t0 < p1y)
+                || (t1 > 0 && t1 <= m_info.height+1 && p0y <= t1 && t1 < p1y))
             {
-                if (dbg)
-                    std::cerr << xCurve.swapCoordinates() << " intersects {" << p0x << "}x["
-                              << p0y << ", " << p1y << "a)\n";
-                if (dbg) std::cerr << t0 << ", " << t1 << "\n";
-                if (dbg) std::cerr << "Should lie between " << p0y << " and " << p1y << "\n";
                 return true;
             }
         }
         if (xCurve.minY() <= p1x && xCurve.maxY() > p1x)
         {
-            intersect({p0y, p1x}, xCurve, t0, t1);
-            if ((p0y < t0 && t0 <= p1y) || (p0y < t1 && t1 <= p1y))
+            custIntersect({p0y, p1x}, xCurve, t0, t1);
+            if ((t0 > 0 && t0 <= m_info.height+1 && p0y <= t0 && t0 < p1y)
+                || (t1 > 0 && t1 <= m_info.height+1 && p0y <= t1 && t1 < p1y))
             {
-                if (dbg)
-                    std::cerr << xCurve.swapCoordinates() << " intersects {" << p1x << "}x["
-                              << p0y << ", " << p1y << ")\n";
                 return true;
             }
         }
     }
-    if (dbg)
-        std::cerr << "No curve intersects [" << p0x << ", " << p1x << ")x["
-                  << p0y << ", " << p1y << ")\n";
     return false;
 }
 
@@ -392,9 +422,13 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
 int Glyph::xIsInside(vec2 pos) const noexcept
 {
     int x = (pos.x - m_info.hCursorX) / m_boxLength;
-    //int y = (m_info.hCursorY - pos.y) / m_boxLength;
     int y = pos.y / m_boxLength;
-    return m_bitmap(x, y);
+    if (pos.x > 1 && pos.x <= m_info.width &&
+        pos.y > 1 && pos.y <= m_info.height)
+    {
+        return m_bitmap(x, y);
+    }
+    return 2;
     std::swap(pos.x, pos.y);
     int intersections = 0;
     for (size_t i = 0; i < m_xcurves.size(); ++i)
@@ -411,6 +445,15 @@ int Glyph::xIsInside(vec2 pos) const noexcept
 
 bool Glyph::yIsInside(vec2 pos) const noexcept
 {
+    int x = (pos.x - m_info.hCursorX) / m_boxLength;
+    int y = pos.y / m_boxLength;
+    int v = 2;
+    if (pos.x > 1 && pos.x <= m_info.width &&
+        pos.y > 1 && pos.y <= m_info.height)
+    {
+        v = m_bitmap(x, y);
+    }
+    if (v != 2) return v;
     int intersections = 0;
     for (size_t i = 0; i < m_ycurves.size(); ++i)
     {
@@ -471,11 +514,13 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
+            /*
             auto inside = glyph.xIsInside(glyphPos);
-            //U32 col = inside ? (inside == 2 ? 0xaa : 0xff) : 0x55;
-            U32 col = inside == 2 ? 0xff : 0;
+            U32 col = inside == 2 ? 0xff : inside * 0x7f;
             U32 c2 = glyph.yIsInside(glyphPos) * 0xff;
-            img.setPixel(x, y, col | (col << 8) | (c2 << 16));
+            img.setPixel(x, y, col | (col << 8) | (c2 << 16));/*/
+            auto inside = glyph.yIsInside(glyphPos);
+            img.setPixel(x, y, inside * 0xffffff);//*/
         }
     }
     return img;
