@@ -2,15 +2,16 @@
 
 #include <stdexcept>
 
-void CompressedBitmap::setResolution(size_t logWidth)
+void CompressedBitmap::setResolution(size_t logLength)
 {
-    if (logWidth > 14)
+    if (logLength > 14)
     {
-        throw std::domain_error("It's log(width), you dolt.");
+        throw std::domain_error("It's log(length), you dolt.");
     }
-    size_t width = 1 << logWidth;
+    size_t w = 1 << logLength;
     // Pad if image width fits in less than a pixel.
-    m_bmWidth = width >= 4 ? width : 4;
-    m_pixCount = width;
-    m_data.resize((m_bmWidth>>2) * m_pixCount);
+    m_bmLength = w >= 4 ? w : 4;
+    m_byteWidth = m_bmLength >> 2;
+    m_rows = w;
+    m_data.resize((m_bmLength>>2) * m_rows);
 }

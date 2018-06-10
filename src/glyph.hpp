@@ -40,16 +40,20 @@ public:
 
     bool xIsInside(vec2 pos) const noexcept;
     bool yIsInside(vec2 pos) const noexcept;
+
+    const CompressedBitmap& getMap() const { return m_bitmap; }
 private:
 
     void extractOutlines(const std::vector<size_t>& contourEnd,
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control);
+    void createBitmap(size_t logLength);
 
     std::vector<PackedBezier> m_xcurves;
     std::vector<PackedBezier> m_ycurves;
 
     CompressedBitmap m_bitmap;
+    size_t m_boxLength;
 
     GlyphInfo m_info;
 };
