@@ -68,7 +68,6 @@ Glyph::Glyph(FT_Outline outline, FT_Glyph_Metrics metrics)
     m_info.yAdvance = static_cast<int>(metrics.vertAdvance);
 
     extractOutlines(contourEnd, position, isControl);
-    createBitmap(5);
 }
 
 
@@ -78,7 +77,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 {
     ivec2 offset{0, 0};
     size_t contourBegin = 0;
-    std::vector<ivec2> curves;
+    std::vector<PackedBezier> curves;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
     {
         auto prevIdx = contourEnd[contour]-1;
@@ -109,9 +108,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 prevControl = false;
             }
             prevPos = cPos;
-            curves.push_back(p);
-            curves.push_back(q);
-            curves.push_back(r);
+            curves.emplace_back(p, q, r);
             offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
             offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
         }
@@ -123,11 +120,30 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 
     offset = -offset;
 
-    for (size_t i = 0; i < curves.size(); i += 3)
+    for (auto& curve : curves)
     {
-        auto p = curves[i]+offset;
-        auto q = curves[i+1]+offset;
-        auto r = curves[i+2]+offset;
+        curve.p0x += offset.x; curve.p1x += offset.x; curve.p2x += offset.x;
+        curve.p0y += offset.y; curve.p1y += offset.y; curve.p2y += offset.y;
+    }
+
+    m_info.hCursorX += offset.x;
+    m_info.hCursorY += offset.y;
+    m_info.vCursorX += offset.x;
+    m_info.vCursorY += offset.y;
+
+
+    sortByY(curves);
+    processCurves(curves);
+    createBitmap(5, curves);
+}
+
+void Glyph::processCurves(const std::vector<PackedBezier>& curves)
+{
+    for (const auto& curve : curves)
+    {
+        auto p = ivec2{curve.p0x, curve.p0y};
+        auto q = ivec2{curve.p1x, curve.p1y};
+        auto r = ivec2{curve.p2x, curve.p2y};
         if (p.x != q.x || q.x != r.x)
         {
             if (p.y == q.y && p.x == q.x && q.x < r.x)
@@ -156,24 +172,16 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         }
     }
 
-    m_info.hCursorX += offset.x;
-    m_info.hCursorY += offset.y;
-    m_info.vCursorX += offset.x;
-    m_info.vCursorY += offset.y;
-
-    std::sort(m_xcurves.begin(), m_xcurves.end(),
+    sortByY(m_xcurves);
+}
+void Glyph::sortByY(std::vector<PackedBezier>& curves)
+{
+    std::sort(curves.begin(), curves.end(),
               [](const PackedBezier& a, const PackedBezier& b)
               {
                   if (a.minY() == b.minY()) return a.minY() < b.minY();
                   return a.minY() < b.minY();
               });
-    std::sort(m_ycurves.begin(), m_ycurves.end(),
-              [](const PackedBezier& a, const PackedBezier& b)
-              {
-                  if (a.minY() == b.minY()) return a.minY() < b.minY();
-                  return a.minY() < b.minY();
-              });
-
 }
 
 void Glyph::dumpInfo() const
@@ -199,10 +207,12 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-void Glyph::createBitmap(size_t logLength)
+void Glyph::createBitmap(size_t logLength,
+                         const std::vector<PackedBezier>& curves)
 {
     m_bitmap.setResolution(logLength);
-
+    (void)curves;
+/*
     size_t length = 1 << logLength;
     size_t maxDim = std::max(m_info.width, m_info.height)+1; // +1, since boxes
                                                              // are half-open.
@@ -212,12 +222,26 @@ void Glyph::createBitmap(size_t logLength)
     {
         for (size_t y = 0; y < length; ++y)
         {
-            vec2 p0 = vec2{float(m_info.hCursorX+x*m_boxLength),
-                           float(m_info.hCursorY-y*m_boxLength)};
-            bool inside0 = yIsInside(p0);
-            m_bitmap.setValue(x, y, inside0);
+            auto p0 = ivec2{int(m_info.hCursorX+x*m_boxLength),
+                           int(m_info.hCursorY-y*m_boxLength)};
+            auto p1 = p0+ivec2{int(m_boxLength), int(m_boxLength)};
+            bool intersections = boxIntersects(p0, p1);
+            int status = 0;
+            if (!intersections)
+            {
+                status = yIsInside({p0.x, p0.y}, )
+            }
+
+            m_bitmap.setValue(x, y, status);
         }
-    }
+    }*/
+}
+
+bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
+                          const std::vector<PackedBezier>& curves)
+{
+    (void)p0; (void)p1; (void)curves;
+    return true;
 }
 
 int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept
@@ -251,14 +275,14 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
     S16 E = bezier.p0x-2*bezier.p1x+bezier.p2x;
     S16 F = 2*(bezier.p1x-bezier.p0x);
     float G = bezier.p0x-pos.x;
-    auto tmX = tMinus * (E * tMinus + F) + G;
-    auto tpX = tPlus * (E * tPlus + F) + G;
+    auto tmX = tMinus * (E * tMinus + F);
+    auto tpX = tPlus * (E * tPlus + F);
 
-    minusX = tmX * (lookup&1);
-    plusX = tpX * ((lookup&2)>>1);
+    minusX = (tmX+bezier.p0x) * (lookup&1);
+    plusX = (tpX+bezier.p0x) * ((lookup&2)>>1);
 
-    auto cnt = (tmX >= 0) * (lookup&1)
-               - (tpX >= 0) * ((lookup&2)>>1);
+    auto cnt = (tmX + G >= 0) * (lookup&1)
+               - (tpX + G >= 0) * ((lookup&2)>>1);
 
     return cnt;
 }
@@ -346,17 +370,7 @@ FontInfo::FontInfo(FT_Face face)
 }
 
 Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
-{/*
-    const auto& map = glyph.getMap();
-    Image msf(map.width(), map.rows());
-    for (size_t i = 0; i < map.width(); ++i)
-    {
-        for (size_t j = 0; j < map.rows(); ++j)
-        {
-            msf.setPixel(i, j, map(i, j) * 0xffffff);
-        }
-    }
-    return msf;*/
+{
     int pixelWidth, pixelHeight;
 
     if (width <= 0)
@@ -385,7 +399,7 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
-            auto inside = glyph.xIsInside(glyphPos);
+            auto inside = glyph.yIsInside(glyphPos);
             img.setPixel(x, y, inside ? 0xffffff : 0);
         }
     }
