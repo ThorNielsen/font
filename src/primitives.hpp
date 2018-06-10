@@ -51,6 +51,11 @@ struct PackedBezier
         construct();
     }
 
+    PackedBezier swapCoordinates() const
+    {
+        return PackedBezier(ivec2{p0y, p0x}, ivec2{p1y, p1x}, ivec2{p2y, p2x});
+    }
+
     U32 lookup;
     T p0x;
     T p1x;
@@ -78,6 +83,13 @@ struct PackedBezier
 private:
     void construct();
 };
+
+inline std::ostream& operator<<(std::ostream& ost, PackedBezier c)
+{
+    return ost << "{(" << c.p0x << ", " << c.p0y << "), ("
+                       << c.p1x << ", " << c.p1y << "), ("
+                       << c.p2x << ", " << c.p2y << ")}";
+}
 
 #endif // PRIMITIVES_HPP_INCLUDED
 

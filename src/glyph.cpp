@@ -75,7 +75,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                             const std::vector<ivec2>& position,
                             const std::vector<bool>& control)
 {
-    ivec2 offset{0, 0};
+    ivec2 offset{0, 100000};
     size_t contourBegin = 0;
     std::vector<PackedBezier> curves;
     for (size_t contour = 0; contour < contourEnd.size(); ++contour)
@@ -87,6 +87,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
         {
             ivec2 p{0, 0}, q{0, 0}, r{0, 0};
             auto cPos = position[i];
+            bool addedCurve = false;
             if (control[i])
             {
                 auto nextIdx = i+1-contourBegin;
@@ -96,21 +97,26 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
                 q = cPos;
                 r = position[nextIdx];
                 prevControl = true;
+                addedCurve = true;
             }
             else if (!prevControl)
             {
                 p = prevPos;
                 q = prevPos;
                 r = cPos;
+                addedCurve = true;
             }
             else
             {
                 prevControl = false;
             }
             prevPos = cPos;
-            curves.emplace_back(p, q, r);
-            offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
-            offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
+            if (addedCurve)
+            {
+                curves.emplace_back(p, q, r);
+                offset.x = std::min(std::min(offset.x, p.x), std::min(q.x, r.x));
+                offset.y = std::min(std::min(offset.y, p.y), std::min(q.y, r.y));
+            }
         }
         contourBegin = contourEnd[contour];
     }
@@ -119,6 +125,8 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
     --offset.y;
 
     offset = -offset;
+
+    std::cerr << "Translating outlines by " << offset << "\n";
 
     for (auto& curve : curves)
     {
@@ -134,7 +142,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
 
     sortByY(curves);
     processCurves(curves);
-    createBitmap(5, curves);
+    createBitmap(4, curves);
 }
 
 void Glyph::processCurves(const std::vector<PackedBezier>& curves)
@@ -211,37 +219,102 @@ void Glyph::createBitmap(size_t logLength,
                          const std::vector<PackedBezier>& curves)
 {
     m_bitmap.setResolution(logLength);
-    (void)curves;
-/*
     size_t length = 1 << logLength;
     size_t maxDim = std::max(m_info.width, m_info.height)+1; // +1, since boxes
                                                              // are half-open.
     m_boxLength = maxDim / length + (maxDim % length ? 1 : 0);
 
-    for (size_t x = 0; x < length; ++x)
+    for (size_t y = 0; y < length; ++y)
     {
-        for (size_t y = 0; y < length; ++y)
+        for (size_t x = 0; x < length; ++x)
         {
             auto p0 = ivec2{int(m_info.hCursorX+x*m_boxLength),
-                           int(m_info.hCursorY-y*m_boxLength)};
+                            int(y*m_boxLength)};
             auto p1 = p0+ivec2{int(m_boxLength), int(m_boxLength)};
-            bool intersections = boxIntersects(p0, p1);
+            bool intersections = boxIntersects(p0, p1, curves);
             int status = 0;
             if (!intersections)
             {
-                status = yIsInside({p0.x, p0.y}, )
+                status = yIsInside({(float)p0.x, (float)p0.y});
             }
-
+            else
+            {
+                status = 2;
+            }
+            std::cerr << status;
             m_bitmap.setValue(x, y, status);
         }
-    }*/
+        std::cerr << '\n';
+    }
 }
 
 bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
                           const std::vector<PackedBezier>& curves)
 {
-    (void)p0; (void)p1; (void)curves;
-    return true;
+    //std::cerr << p0 << "\n";
+    //bool dbg = p0.x == 93 && p0.y == -1;
+    //bool dbg = p0.x == 54 && p0.y == 19;
+    //bool dbg = p0.x == 2 && p0.y == -7;
+    bool dbg = p0.x == 146 && p0.y == -2;
+    dbg = false;
+    float p0x = p0.x; float p0y = p0.y;
+    float p1x = p1.x; float p1y = p1.y;
+    for (const PackedBezier& yCurve : curves)
+    {
+        float t0 = 0.f, t1 = 0.f;
+        if (yCurve.minY() <= p0y && yCurve.maxY() > p0y)
+        {
+            intersect({p0x, p0y}, yCurve, t0, t1);
+            if ((p0x < t0 && t0 <= p1x) || (p0x < t1 && t1 <= p1x))
+            {
+                if (dbg)
+                    std::cerr << yCurve << " intersects [" << p0x << ", " << p1x << ")x{"
+                              << p0y << "}\n";
+                return true;
+            }
+        }
+        if (yCurve.minY() <= p1y && yCurve.maxY() > p1y)
+        {
+            intersect({p0x, p1y}, yCurve, t0, t1);
+            if ((p0x < t0 && t0 <= p1x) || (p0x < t1 && t1 <= p1x))
+            {
+                if (dbg)
+                    std::cerr << yCurve << " intersects [" << p0x << ", " << p1x << ")x{"
+                              << p1y << "}\n";
+                return true;
+            }
+        }
+
+        auto xCurve = yCurve.swapCoordinates();
+        if (xCurve.minY() <= p0x && xCurve.maxY() > p0x)
+        {
+            intersect({p0y, p0x}, xCurve, t0, t1);
+            if ((p0y < t0 && t0 <= p1y) || (p0y < t1 && t1 <= p1y))
+            {
+                if (dbg)
+                    std::cerr << xCurve.swapCoordinates() << " intersects {" << p0x << "}x["
+                              << p0y << ", " << p1y << "a)\n";
+                if (dbg) std::cerr << t0 << ", " << t1 << "\n";
+                if (dbg) std::cerr << "Should lie between " << p0y << " and " << p1y << "\n";
+                return true;
+            }
+        }
+        if (xCurve.minY() <= p1x && xCurve.maxY() > p1x)
+        {
+            intersect({p0y, p1x}, xCurve, t0, t1);
+            if ((p0y < t0 && t0 <= p1y) || (p0y < t1 && t1 <= p1y))
+            {
+                if (dbg)
+                    std::cerr << xCurve.swapCoordinates() << " intersects {" << p1x << "}x["
+                              << p0y << ", " << p1y << ")\n";
+                return true;
+            }
+        }
+    }
+    if (dbg)
+        std::cerr << "No curve intersects [" << p0x << ", " << p1x << ")x["
+                  << p0y << ", " << p1y << ")\n";
+    return false;
 }
 
 int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept
@@ -316,12 +389,11 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
 // is somewhat common (depending on the font) and if we happen to hit a point
 // very near an interior line, we could end up with a pixel value of about one
 // half meaning that there would potentially be a gray line inside the glyph.
-bool Glyph::xIsInside(vec2 pos) const noexcept
+int Glyph::xIsInside(vec2 pos) const noexcept
 {
     int x = (pos.x - m_info.hCursorX) / m_boxLength;
-    int y = (m_info.hCursorY - pos.y) / m_boxLength;
-    if (y >= 128) y = 127;
-    if (y < 0) y = 0;
+    //int y = (m_info.hCursorY - pos.y) / m_boxLength;
+    int y = pos.y / m_boxLength;
     return m_bitmap(x, y);
     std::swap(pos.x, pos.y);
     int intersections = 0;
@@ -399,8 +471,11 @@ Image render(const FontInfo& info, const Glyph& glyph, int width, int height)
             vec2 glyphPos;
             glyphPos.x = glyph.info().hCursorX + x*glyph.info().width/float(pixelWidth);
             glyphPos.y = glyph.info().hCursorY - y*glyph.info().height/float(pixelHeight);
-            auto inside = glyph.yIsInside(glyphPos);
-            img.setPixel(x, y, inside ? 0xffffff : 0);
+            auto inside = glyph.xIsInside(glyphPos);
+            //U32 col = inside ? (inside == 2 ? 0xaa : 0xff) : 0x55;
+            U32 col = inside == 2 ? 0xff : 0;
+            U32 c2 = glyph.yIsInside(glyphPos) * 0xff;
+            img.setPixel(x, y, col | (col << 8) | (c2 << 16));
         }
     }
     return img;

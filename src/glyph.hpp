@@ -38,7 +38,7 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
-    bool xIsInside(vec2 pos) const noexcept;
+    int xIsInside(vec2 pos) const noexcept;
     bool yIsInside(vec2 pos) const noexcept;
 
     const CompressedBitmap& getMap() const { return m_bitmap; }
@@ -67,7 +67,7 @@ private:
     GlyphInfo m_info;
 };
 
-int intersect(vec2 pos, PackedBezier bezier) noexcept;
+int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept;
 
 struct FontInfo
 {
