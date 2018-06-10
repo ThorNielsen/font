@@ -229,7 +229,22 @@ void Glyph::createBitmap(size_t logLength,
         {
             auto p0 = ivec2{int(x*m_boxLength),
                             int(y*m_boxLength)};
+
+            if (p0.x > m_info.width + 1 || p0.y > m_info.height + 1)
+            {
+                m_bitmap.setValue(x, y, 0);
+                continue;
+            }
+
             auto p1 = p0+ivec2{int(m_boxLength), int(m_boxLength)};
+            if (p0.x <= m_info.width && p1.x > m_info.width)
+            {
+                p1.x = m_info.width+1;
+            }
+            if (p0.y <= m_info.height && p1.y > m_info.height)
+            {
+                p1.y = m_info.height+1;
+            }
             bool intersections = boxIntersects(p0, p1, curves);
             int status = 0;
             if (!intersections)
@@ -248,49 +263,6 @@ void Glyph::createBitmap(size_t logLength,
     }
 }
 
-int custIntersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexcept
-{
-    float C = bezier.p0y-pos.y;
-    float K = bezier.p2y-pos.y;
-
-    bool cgz = C>0;
-    bool kgz = K>0;
-    bool cez = std::abs(C) <= 0.f;
-    bool kez = std::abs(K) <= 0.f;
-    auto lookup = (bezier.lookup>>(2*cgz+4*kgz))&3;
-    lookup |= cez + kez*2;
-
-    S16 B = bezier.p1y-bezier.p0y;
-    S16 A = B+bezier.p1y-bezier.p2y;
-
-    float tMinus, tPlus;
-    if (A == 0)
-    {
-        tMinus = C / (float)((-2)*B);
-        tPlus = tMinus;
-    }
-    else
-    {
-        float comp1 = std::sqrt((float)(B*B+A*C));
-        tMinus = (B + comp1)/(float)(A); // Add temp variable invA = 1/A, and
-        tPlus  = (B - comp1)/(float)(A); // multiply by that instead.
-    }
-
-    S16 E = bezier.p0x-2*bezier.p1x+bezier.p2x;
-    S16 F = 2*(bezier.p1x-bezier.p0x);
-    float G = bezier.p0x-pos.x;
-    auto tmX = tMinus * (E * tMinus + F);
-    auto tpX = tPlus * (E * tPlus + F);
-
-    minusX = (tmX+bezier.p0x) * (lookup&1);
-    plusX = (tpX+bezier.p0x) * ((lookup&2)>>1);
-
-    auto cnt = (tmX + G >= 0) * (lookup&1)
-               - (tpX + G >= 0) * ((lookup&2)>>1);
-
-    return cnt;
-}
-
 bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
                           const std::vector<PackedBezier>& curves)
 {
@@ -301,22 +273,22 @@ bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
         bool xDegenerate = yCurve.p0x == yCurve.p1x && yCurve.p1x == yCurve.p2x;
         bool yDegenerate = yCurve.p0y == yCurve.p1y && yCurve.p1y == yCurve.p2y;
         if (xDegenerate && yCurve.p0x == 1) continue;
-        if (xDegenerate && yCurve.p0x == m_info.width) continue;
+        if (xDegenerate && yCurve.p0x == m_info.width+1) continue;
         if (yDegenerate && yCurve.p0y == 1) continue;
-        if (yDegenerate && yCurve.p0y == m_info.height) continue;
+        if (yDegenerate && yCurve.p0y == m_info.height+1) continue;
         float t0 = 0.f, t1 = 0.f;
-        if (yCurve.minY() <= p0y && yCurve.maxY() > p0y)
+        if (yCurve.minY() <= p0y && yCurve.maxY() >= p0y)
         {
-            custIntersect({p0x, p0y}, yCurve, t0, t1);
+            intersect({p0x, p0y}, yCurve, t0, t1);
             if ((t0 > 0 && t0 <= m_info.width+1 && p0x <= t0 && t0 < p1x)
                 || (t1 > 0 && t1 <= m_info.width+1 && p0x <= t1 && t1 < p1x))
             {
                 return true;
             }
         }
-        if (yCurve.minY() <= p1y && yCurve.maxY() > p1y)
+        if (yCurve.minY() <= p1y && yCurve.maxY() >= p1y)
         {
-            custIntersect({p0x, p1y}, yCurve, t0, t1);
+            intersect({p0x, p1y}, yCurve, t0, t1);
             if ((t0 > 0 && t0 <= m_info.width+1 && p0x <= t0 && t0 < p1x)
                 || (t1 > 0 && t1 <= m_info.width+1 && p0x <= t1 && t1 < p1x))
             {
@@ -325,18 +297,18 @@ bool Glyph::boxIntersects(ivec2 p0, ivec2 p1,
         }
 
         auto xCurve = yCurve.swapCoordinates();
-        if (xCurve.minY() <= p0x && xCurve.maxY() > p0x)
+        if (xCurve.minY() <= p0x && xCurve.maxY() >= p0x)
         {
-            custIntersect({p0y, p0x}, xCurve, t0, t1);
+            intersect({p0y, p0x}, xCurve, t0, t1);
             if ((t0 > 0 && t0 <= m_info.height+1 && p0y <= t0 && t0 < p1y)
                 || (t1 > 0 && t1 <= m_info.height+1 && p0y <= t1 && t1 < p1y))
             {
                 return true;
             }
         }
-        if (xCurve.minY() <= p1x && xCurve.maxY() > p1x)
+        if (xCurve.minY() <= p1x && xCurve.maxY() >= p1x)
         {
-            custIntersect({p0y, p1x}, xCurve, t0, t1);
+            intersect({p0y, p1x}, xCurve, t0, t1);
             if ((t0 > 0 && t0 <= m_info.height+1 && p0y <= t0 && t0 < p1y)
                 || (t1 > 0 && t1 <= m_info.height+1 && p0y <= t1 && t1 < p1y))
             {

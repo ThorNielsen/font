@@ -71,7 +71,7 @@ int main()
     timer.start();
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
-        if (idx != 160) continue;
+        if (idx != 29) continue;
         //if (idx > 50) break;
         std::stringstream name;
         name << idx;
