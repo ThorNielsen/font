@@ -38,8 +38,7 @@ public:
 
     const GlyphInfo& info() const { return m_info; }
 
-    int xIsInside(vec2 pos) const noexcept;
-    bool yIsInside(vec2 pos) const noexcept;
+    bool isInside(vec2 pos) const noexcept;
 
     const CompressedBitmap& getMap() const { return m_bitmap; }
 private:
@@ -58,8 +57,7 @@ private:
 
     void sortByY(std::vector<PackedBezier>& curves);
 
-    std::vector<PackedBezier> m_xcurves;
-    std::vector<PackedBezier> m_ycurves;
+    std::vector<PackedBezier> m_curves;
 
     CompressedBitmap m_bitmap;
     size_t m_boxLength;

@@ -50,7 +50,7 @@ int main()
 
 
     bool validate = true;
-    bool writeImages = true;
+    bool writeImages = false;
     bool updateChecksums = false;
 
     for (auto& fontname : faces)
@@ -71,7 +71,6 @@ int main()
     timer.start();
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
-        if (idx != 29) continue;
         //if (idx > 50) break;
         std::stringstream name;
         name << idx;
