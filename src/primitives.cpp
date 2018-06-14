@@ -12,7 +12,7 @@ void PackedBezier::construct()
     lookup = 0; // Replaces  if (A != 0)  body.
 
     // Lower bit contains minusGood and higher bit contains plusGood.
-    // Indexed with (C > 0) + 2*(K > 0)
+    // Indexed with (C >= 0) + 2*(K >= 0)
     /// !cgz, !kgz
     lookup |= 0x01*((bgz ? agz : 0) && (mgz ? 1 : !agz));
     lookup |= 0x02*((bgz ? 1 : !agz) && (mgz ? agz : 0));

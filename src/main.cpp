@@ -71,7 +71,6 @@ int main()
     timer.start();
     for (int idx = 0; idx < face->num_glyphs; ++idx)
     {
-        //if (idx > 50) break;
         std::stringstream name;
         name << idx;
         std::cerr << "Rendering glyph #" << name.str() << "...";
@@ -129,7 +128,6 @@ int main()
     {
         writeChecksums(fontname, checksums);
     }
-    break;
 
     }
 

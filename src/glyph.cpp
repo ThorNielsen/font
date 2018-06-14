@@ -137,8 +137,6 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
     m_info.vCursorX += offset.x;
     m_info.vCursorY += offset.y;
 
-
-    sortByY(curves);
     processCurves(curves);
     //createBitmap(1, curves);
 }
@@ -312,11 +310,7 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
     S16 B = bezier.p1y-bezier.p0y;
     S16 A = B+bezier.p1y-bezier.p2y;
 
-
-    bool cgz = C>0;
-    bool kgz = K>0;
-    auto lookup = (bezier.lookup>>(2*cgz+4*kgz))&3;
-
+    auto lookup = (bezier.lookup>>(2*(C>=0)+4*(K>=0)))&3;
 
     float tMinus, tPlus;
     if (A == 0)
@@ -340,8 +334,8 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
     minusX = (tmX+bezier.p0x) * (lookup&1);
     plusX = (tpX+bezier.p0x) * ((lookup&2)>>1);
 
-    int cnt = (tmX + G >= 0) * (lookup&1)
-               - (tpX + G >= 0) * ((lookup&2)>>1);
+    int cnt = (tmX + G <= 0) * (lookup&1)
+            - (tpX + G <= 0) * ((lookup&2)>>1);
 
     return cnt;
 }
@@ -394,7 +388,7 @@ bool Glyph::isInside(vec2 pos) const noexcept
         const auto& curve = m_curves[i];
         if (curve.minY() > pos.y) break;
         if (curve.maxY() < pos.y) continue;
-        if (curve.maxX() < pos.x) continue;
+        if (curve.minX() > pos.x) continue;
         float dummy;
         intersections += intersect(pos, curve, dummy, dummy);
     }
