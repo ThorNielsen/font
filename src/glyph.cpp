@@ -138,7 +138,7 @@ void Glyph::extractOutlines(const std::vector<size_t>& contourEnd,
     m_info.vCursorY += offset.y;
 
     processCurves(curves);
-    //createBitmap(1, curves);
+    createLookup(4, curves);
 }
 
 void Glyph::processCurves(const std::vector<PackedBezier>& curves)
@@ -189,7 +189,7 @@ void Glyph::dumpInfo() const
     std::cout << "\n";
 }
 
-void Glyph::createBitmap(size_t logLength,
+void Glyph::createLookup(size_t logLength,
                          const std::vector<PackedBezier>& curves)
 {
     m_bitmap.setResolution(logLength);
@@ -198,6 +198,23 @@ void Glyph::createBitmap(size_t logLength,
     // coordinates are reserved.
     size_t maxDim = std::max(m_info.width, m_info.height)+1;
     m_boxLength = maxDim / length + (maxDim % length ? 1 : 0);
+
+    m_rowindices.resize(length+1);
+    size_t nextRow = 0;
+    m_rowindices[0] = 0;
+    for (size_t i = 0; i < m_curves.size(); ++i)
+    {
+        while ((int)(m_boxLength * nextRow) <= m_curves[i].maxY())
+        {
+            m_rowindices[nextRow++] = i;
+        }
+    }
+    for (size_t i = nextRow; i < m_rowindices.size(); ++i)
+    {
+        m_rowindices[i] = m_rowindices[nextRow];
+    }
+
+    return;
 
     for (size_t y = 0; y < length; ++y)
     {
@@ -364,10 +381,10 @@ int intersect(vec2 pos, PackedBezier bezier, float& minusX, float& plusX) noexce
 
 bool Glyph::isInside(vec2 pos) const noexcept
 {
-    /*
-    int x = (pos.x - m_info.hCursorX) / m_boxLength;
+
     int y = pos.y / m_boxLength;
-    int v = 2;
+    /*
+    int x = (pos.x - m_info.hCursorX) / m_boxLength;int v = 2;
     if (pos.x > 1 && pos.x <= m_info.width &&
         pos.y > 1 && pos.y <= m_info.height)
     {
@@ -375,7 +392,7 @@ bool Glyph::isInside(vec2 pos) const noexcept
     }
     if (v != 2) return v;*/
     int intersections = 0;
-    for (size_t i = 0; i < m_curves.size(); ++i)
+    for (size_t i = m_rowindices[y]; i < m_curves.size(); ++i)
     {
         const auto& curve = m_curves[i];
         if (curve.minY() > pos.y) break;

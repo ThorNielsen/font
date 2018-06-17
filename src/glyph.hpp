@@ -47,7 +47,7 @@ private:
                          const std::vector<ivec2>& position,
                          const std::vector<bool>& control);
     void processCurves(const std::vector<PackedBezier>& curves);
-    void createBitmap(size_t logLength,
+    void createLookup(size_t logLength,
                       const std::vector<PackedBezier>& curves);
     // This tests whether the box defined by [p0.x, p1.x) x [p0.y, p1.y)
     // intersects any curves (note that curves fully inside the box are counted
@@ -60,6 +60,7 @@ private:
     std::vector<PackedBezier> m_curves;
 
     CompressedBitmap m_bitmap;
+    std::vector<size_t> m_rowindices;
     size_t m_boxLength;
 
     GlyphInfo m_info;
