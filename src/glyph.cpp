@@ -150,14 +150,6 @@ void Glyph::processCurves(const std::vector<PackedBezier>& curves)
         auto r = ivec2{curve.p2x, curve.p2y};
         if (p.y != q.y || q.y != r.y)
         {
-            if (p.x == q.x && p.y == q.y && q.y < r.y)
-            {
-                q = r;
-            }
-            if (r.x == q.x && r.y == q.y && q.y < p.y)
-            {
-                q = p;
-            }
             m_curves.emplace_back(p, q, r);
         }
     }
