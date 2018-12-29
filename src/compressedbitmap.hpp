@@ -14,12 +14,21 @@ public:
 
     U32 operator()(size_t x, size_t y) const
     {
-        return (m_data[m_byteWidth*y+(x>>2)]>>((x&3)<<1))&3;
+        return (m_data.at(m_byteWidth*y+(x>>2))>>((x&3)<<1))&3;
     }
 
     void setValue(size_t x, size_t y, U32 val)
     {
-        m_data[m_byteWidth*y+(x>>2)] |= val << ((x&3)<<1);
+        /*
+        if (x == 17 && y < 5)
+        {
+            std::cerr << "(" << x << ", " << y << ") <- " << val << "\n";
+            x = -x;
+            x = -x;
+        }*/
+        auto idx = m_byteWidth*y+(x>>2);
+        m_data.at(idx) = (m_data.at(idx) & ~(0x3 << ((x&3)<<1)))
+                         | (val << ((x&3)<<1));
     }
 
     size_t width() const { return m_bmLength; }

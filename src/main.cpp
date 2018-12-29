@@ -45,9 +45,8 @@ int main()
 
     std::vector<std::string> faces
     {
-        "decorative", "special", "sans", "serif", "complex"
+        "decorative", "special", "complex", "sans", "serif",
     };
-
 
     bool validate = true;
     bool writeImages = false;

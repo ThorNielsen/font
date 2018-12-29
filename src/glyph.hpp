@@ -49,11 +49,6 @@ private:
     void processCurves(const std::vector<PackedBezier>& curves);
     void createLookup(size_t logLength,
                       const std::vector<PackedBezier>& curves);
-    // This tests whether the box defined by [p0.x, p1.x) x [p0.y, p1.y)
-    // intersects any curves (note that curves fully inside the box are counted
-    // as non-intersecting).
-    bool boxIntersects(ivec2 p0, ivec2 p1,
-                       const std::vector<PackedBezier>& curves);
 
     void sortByY(std::vector<PackedBezier>& curves);
 
